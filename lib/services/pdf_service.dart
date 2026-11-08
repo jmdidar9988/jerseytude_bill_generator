@@ -450,11 +450,11 @@ class PdfInvoiceService {
 
           pw.SizedBox(height: 12),
 
-          // ── 5. PAYMENT CHANNELS & VERIFICATION QR CARD ──────────
+          // ── 5. PAYMENT INFORMATION & QR CODE ────────────────────
           pw.Container(
             padding: const pw.EdgeInsets.all(10),
             decoration: pw.BoxDecoration(
-              color: PdfColors.white,
+              color: cardBg,
               border: pw.Border.all(color: borderColor, width: 0.8),
               borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
             ),
@@ -468,44 +468,46 @@ class PdfInvoiceService {
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
                       pw.Text(
-                        'OFFICIAL PAYMENT CHANNELS',
+                        'PAYMENT INFORMATION',
                         style: pw.TextStyle(
                           font: fontBold,
-                          fontSize: 9,
+                          fontSize: 8.5,
                           color: primaryNavy,
                           letterSpacing: 0.8,
                         ),
                       ),
                       pw.SizedBox(height: 6),
 
-                      // bKash Card with Highlighted Alert
+                      // bKash Row (Organized, clean, neutral styling)
                       pw.Container(
-                        padding: const pw.EdgeInsets.all(6),
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                         decoration: pw.BoxDecoration(
-                          color: const PdfColor.fromInt(0xFFFDF2F8), // Soft rose
+                          color: PdfColors.white,
                           borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
-                          border: pw.Border.all(color: const PdfColor.fromInt(0xFFFBCFE8), width: 0.8),
+                          border: pw.Border.all(color: borderColor, width: 0.6),
                         ),
                         child: pw.Column(
                           crossAxisAlignment: pw.CrossAxisAlignment.start,
                           children: [
                             pw.Row(
                               children: [
-                                pw.Container(
-                                  padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: const pw.BoxDecoration(
-                                    color: PdfColor.fromInt(0xFFE11D48), // bKash Pink
-                                    borderRadius: pw.BorderRadius.all(pw.Radius.circular(3)),
-                                  ),
-                                  child: pw.Text(
-                                    'bKash Personal',
-                                    style: pw.TextStyle(color: PdfColors.white, fontSize: 8, font: fontBold),
+                                pw.Text(
+                                  'bKash (Personal):',
+                                  style: pw.TextStyle(
+                                    fontSize: 8.5,
+                                    font: fontBold,
+                                    color: primaryDark,
                                   ),
                                 ),
                                 pw.SizedBox(width: 8),
                                 pw.Text(
                                   bill.bkashNumber,
-                                  style: pw.TextStyle(fontSize: 10, font: fontBold, color: primaryDark),
+                                  style: pw.TextStyle(
+                                    fontSize: 9.5,
+                                    font: fontBold,
+                                    color: accentBlue,
+                                    letterSpacing: 0.5,
+                                  ),
                                 ),
                                 pw.SizedBox(width: 6),
                                 pw.Text(
@@ -514,61 +516,42 @@ class PdfInvoiceService {
                                 ),
                               ],
                             ),
-                            pw.SizedBox(height: 4),
-                            // Highlighted Cash Out Notice
-                            pw.Container(
-                              padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                              decoration: pw.BoxDecoration(
-                                color: const PdfColor.fromInt(0xFFFFF1F2),
-                                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
-                                border: pw.Border.all(color: const PdfColor.fromInt(0xFFFDA4AF), width: 0.6),
-                              ),
-                              child: pw.Row(
-                                crossAxisAlignment: pw.CrossAxisAlignment.center,
-                                children: [
-                                  pw.Container(
-                                    width: 4,
-                                    height: 4,
-                                    decoration: const pw.BoxDecoration(
-                                      color: PdfColor.fromInt(0xFFE11D48),
-                                      shape: pw.BoxShape.circle,
-                                    ),
+                            pw.SizedBox(height: 3),
+                            pw.Row(
+                              crossAxisAlignment: pw.CrossAxisAlignment.start,
+                              children: [
+                                pw.Text(
+                                  '* Note: ',
+                                  style: pw.TextStyle(
+                                    font: fontBold,
+                                    fontSize: 7.5,
+                                    color: primaryNavy,
                                   ),
-                                  pw.SizedBox(width: 4),
-                                  pw.Text(
-                                    'Notice: ',
-                                    style: pw.TextStyle(
-                                      font: fontBold,
+                                ),
+                                pw.Expanded(
+                                  child: pw.Text(
+                                    'If payment is made via bKash Send Money, the client must add/include the applicable cash out charge.',
+                                    style: const pw.TextStyle(
                                       fontSize: 7.5,
-                                      color: const PdfColor.fromInt(0xFFBE123C),
+                                      color: textBody,
                                     ),
                                   ),
-                                  pw.Expanded(
-                                    child: pw.Text(
-                                      'If payment is made via bKash Send Money, the client must add/include the applicable cash out charge.',
-                                      style: pw.TextStyle(
-                                        font: fontBold,
-                                        fontSize: 7.5,
-                                        color: const PdfColor.fromInt(0xFF9F1239),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
                       ),
 
-                      pw.SizedBox(height: 5),
+                      pw.SizedBox(height: 6),
 
-                      // Bank Transfer Card
+                      // Bank Transfer Card (Structured key-value layout)
                       pw.Container(
-                        padding: const pw.EdgeInsets.all(6),
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                         decoration: pw.BoxDecoration(
-                          color: const PdfColor.fromInt(0xFFEFF6FF), // Soft blue
+                          color: PdfColors.white,
                           borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
-                          border: pw.Border.all(color: const PdfColor.fromInt(0xFFBFDBFE), width: 0.8),
+                          border: pw.Border.all(color: borderColor, width: 0.6),
                         ),
                         child: pw.Column(
                           crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -576,40 +559,81 @@ class PdfInvoiceService {
                             pw.Row(
                               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                               children: [
-                                pw.Text(
-                                  'Bank: ${bill.bankName} (${bill.bankBranch})',
-                                  style: pw.TextStyle(fontSize: 8.5, font: fontBold, color: primaryDark),
+                                pw.RichText(
+                                  text: pw.TextSpan(
+                                    children: [
+                                      const pw.TextSpan(
+                                        text: 'Bank: ',
+                                        style: pw.TextStyle(fontSize: 8, color: textMuted),
+                                      ),
+                                      pw.TextSpan(
+                                        text: '${bill.bankName} (${bill.bankBranch})',
+                                        style: pw.TextStyle(fontSize: 8.5, font: fontBold, color: primaryDark),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                pw.Text(
-                                  'Routing: ${bill.routingNumber}',
-                                  style: const pw.TextStyle(fontSize: 8, color: textMuted),
+                                pw.RichText(
+                                  text: pw.TextSpan(
+                                    children: [
+                                      const pw.TextSpan(
+                                        text: 'Routing: ',
+                                        style: pw.TextStyle(fontSize: 8, color: textMuted),
+                                      ),
+                                      pw.TextSpan(
+                                        text: bill.routingNumber,
+                                        style: pw.TextStyle(fontSize: 8, font: fontBold, color: primaryDark),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ],
                             ),
-                            pw.SizedBox(height: 2),
+                            pw.SizedBox(height: 4),
                             pw.Row(
+                              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                               children: [
-                                pw.Text(
-                                  'A/C Name: ',
-                                  style: const pw.TextStyle(fontSize: 8, color: textMuted),
+                                pw.RichText(
+                                  text: pw.TextSpan(
+                                    children: [
+                                      const pw.TextSpan(
+                                        text: 'A/C Name: ',
+                                        style: pw.TextStyle(fontSize: 8, color: textMuted),
+                                      ),
+                                      pw.TextSpan(
+                                        text: bill.bankAccountName,
+                                        style: pw.TextStyle(fontSize: 8.5, font: fontBold, color: primaryDark),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                pw.Text(
-                                  bill.bankAccountName,
-                                  style: pw.TextStyle(fontSize: 8.5, font: fontBold, color: primaryDark),
+                                pw.RichText(
+                                  text: pw.TextSpan(
+                                    children: [
+                                      const pw.TextSpan(
+                                        text: 'A/C No: ',
+                                        style: pw.TextStyle(fontSize: 8, color: textMuted),
+                                      ),
+                                      pw.TextSpan(
+                                        text: bill.bankAccountNumber,
+                                        style: pw.TextStyle(fontSize: 8.5, font: fontBold, color: accentBlue),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                pw.SizedBox(width: 12),
-                                pw.Text(
-                                  'A/C No: ',
-                                  style: const pw.TextStyle(fontSize: 8, color: textMuted),
-                                ),
-                                pw.Text(
-                                  bill.bankAccountNumber,
-                                  style: pw.TextStyle(fontSize: 8.5, font: fontBold, color: accentBlue),
-                                ),
-                                pw.SizedBox(width: 12),
-                                pw.Text(
-                                  'SWIFT: ${bill.swiftCode}',
-                                  style: const pw.TextStyle(fontSize: 8, color: textMuted),
+                                pw.RichText(
+                                  text: pw.TextSpan(
+                                    children: [
+                                      const pw.TextSpan(
+                                        text: 'SWIFT: ',
+                                        style: pw.TextStyle(fontSize: 8, color: textMuted),
+                                      ),
+                                      pw.TextSpan(
+                                        text: bill.swiftCode,
+                                        style: const pw.TextStyle(fontSize: 8, color: textMuted),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ],
                             ),
@@ -675,7 +699,6 @@ class PdfInvoiceService {
           ),
           pw.SizedBox(height: 3),
           ...List.generate(bill.terms.length, (i) {
-            final isCashOutTerm = i == 0;
             return pw.Padding(
               padding: const pw.EdgeInsets.only(bottom: 2),
               child: pw.Row(
@@ -685,20 +708,18 @@ class PdfInvoiceService {
                     width: 12,
                     child: pw.Text(
                       '${i + 1}.',
-                      style: pw.TextStyle(
+                      style: const pw.TextStyle(
                         fontSize: 8,
-                        font: isCashOutTerm ? fontBold : fontRegular,
-                        color: isCashOutTerm ? const PdfColor.fromInt(0xFFBE123C) : textMuted,
+                        color: textMuted,
                       ),
                     ),
                   ),
                   pw.Expanded(
                     child: pw.Text(
                       bill.terms[i],
-                      style: pw.TextStyle(
+                      style: const pw.TextStyle(
                         fontSize: 8,
-                        font: isCashOutTerm ? fontBold : fontRegular,
-                        color: isCashOutTerm ? const PdfColor.fromInt(0xFF9F1239) : textBody,
+                        color: textBody,
                       ),
                     ),
                   ),
@@ -709,51 +730,11 @@ class PdfInvoiceService {
 
           pw.SizedBox(height: 18),
 
-          // ── 7. SIGNATURES & AUDIT FOOTER ────────────────────────
+          // ── 7. AUDIT FOOTER ─────────────────────────────────────
           pw.Column(
             children: [
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Container(
-                        width: 120,
-                        decoration: const pw.BoxDecoration(
-                          border: pw.Border(top: pw.BorderSide(color: borderColor, width: 0.8)),
-                        ),
-                        padding: const pw.EdgeInsets.only(top: 3),
-                        child: pw.Text(
-                          'Customer Acceptance',
-                          textAlign: pw.TextAlign.center,
-                          style: const pw.TextStyle(fontSize: 7.5, color: textMuted),
-                        ),
-                      ),
-                    ],
-                  ),
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.end,
-                    children: [
-                      pw.Container(
-                        width: 130,
-                        decoration: const pw.BoxDecoration(
-                          border: pw.Border(top: pw.BorderSide(color: borderColor, width: 0.8)),
-                        ),
-                        padding: const pw.EdgeInsets.only(top: 3),
-                        child: pw.Text(
-                          'Authorized Signatory\nJerseytude',
-                          textAlign: pw.TextAlign.center,
-                          style: const pw.TextStyle(fontSize: 7.5, color: textMuted),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 10),
-              pw.Divider(color: borderColor, thickness: 0.5),
-              pw.SizedBox(height: 2),
+              pw.Divider(color: borderColor, thickness: 0.8),
+              pw.SizedBox(height: 4),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
