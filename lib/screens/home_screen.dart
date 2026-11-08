@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/bill.dart';
-import '../services/database_service.dart';
+import '../services/firestore_service.dart';
 import '../services/pdf_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/bill_card.dart';
@@ -40,7 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadBills() async {
     setState(() => _isLoading = true);
-    final bills = await DatabaseService.getAllBills();
+    final bills = await FirestoreService.getAllBills();
     setState(() {
       _allBills = bills;
       _applyFilter();
@@ -117,7 +117,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (confirm == true) {
-      await DatabaseService.deleteBill(bill.id);
+      await FirestoreService.deleteBill(bill.id);
       _loadBills();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -128,8 +128,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _restoreDemoBill() async {
-    final demo = DatabaseService.getDemoBill();
-    await DatabaseService.saveBill(demo);
+    final demo = FirestoreService.getDemoBill();
+    await FirestoreService.saveBill(demo);
     _loadBills();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -374,7 +374,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              'Database Records (${_filteredBills.length})',
+                              'Cloud Invoices (${_filteredBills.length})',
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/bill.dart';
 import '../models/order_item.dart';
-import '../services/database_service.dart';
+import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/number_to_words.dart';
 import '../widgets/item_dialog.dart';
@@ -65,7 +65,7 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
   }
 
   Future<void> _generateInvoiceNumber() async {
-    final nextNo = await DatabaseService.getNextInvoiceNumber();
+    final nextNo = await FirestoreService.getNextInvoiceNumber();
     if (mounted) {
       setState(() {
         _invoiceNoController.text = nextNo;
@@ -138,7 +138,7 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final bill = _buildBill();
-    await DatabaseService.saveBill(bill);
+    await FirestoreService.saveBill(bill);
 
     if (!mounted) return;
 
