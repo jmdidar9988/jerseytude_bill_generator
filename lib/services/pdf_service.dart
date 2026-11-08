@@ -404,6 +404,17 @@ class PdfInvoiceService {
                           ],
                         ),
                       ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.only(top: 3, left: 4),
+                        child: pw.Text(
+                          '★ If paying via bKash, you must add the Cash Out charge.',
+                          style: pw.TextStyle(
+                            fontSize: 7.5,
+                            font: fontBold,
+                            color: const PdfColor.fromInt(0xFFBE123C), // Strong rose/red
+                          ),
+                        ),
+                      ),
 
                       pw.SizedBox(height: 6),
 
@@ -503,6 +514,39 @@ class PdfInvoiceService {
           ),
           pw.SizedBox(height: 4),
           ...List.generate(bill.terms.length, (i) {
+            final isBcashCondition = i == 0 || bill.terms[i].toLowerCase().contains('cash out');
+            if (isBcashCondition) {
+              return pw.Container(
+                margin: const pw.EdgeInsets.only(bottom: 3),
+                padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: const pw.BoxDecoration(
+                  color: PdfColor.fromInt(0xFFFEF3C7), // Warm amber highlight
+                  borderRadius: pw.BorderRadius.all(pw.Radius.circular(3)),
+                  border: pw.Border.fromBorderSide(
+                    pw.BorderSide(color: PdfColor.fromInt(0xFFF59E0B), width: 0.8),
+                  ),
+                ),
+                child: pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.SizedBox(
+                      width: 14,
+                      child: pw.Text('${i + 1}.', style: pw.TextStyle(fontSize: 8.5, font: fontBold, color: const PdfColor.fromInt(0xFFB45309))),
+                    ),
+                    pw.Expanded(
+                      child: pw.Text(
+                        bill.terms[i],
+                        style: pw.TextStyle(
+                          fontSize: 8.5,
+                          font: fontBold,
+                          color: const PdfColor.fromInt(0xFF92400E), // Bold amber-brown
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
             return pw.Padding(
               padding: const pw.EdgeInsets.only(bottom: 2),
               child: pw.Row(
