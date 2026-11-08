@@ -371,48 +371,81 @@ class PdfInvoiceService {
                       ),
                       pw.SizedBox(height: 6),
 
-                      // bKash Card
+                      // bKash Card with Highlighted Cash Out Notice
                       pw.Container(
                         padding: const pw.EdgeInsets.all(6),
                         decoration: pw.BoxDecoration(
                           color: const PdfColor.fromInt(0xFFFDF2F8), // Soft pink/rose
                           borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                          border: pw.Border.all(color: const PdfColor.fromInt(0xFFFBCFE8), width: 0.8),
                         ),
-                        child: pw.Row(
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
                           children: [
+                            pw.Row(
+                              children: [
+                                pw.Container(
+                                  padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: const pw.BoxDecoration(
+                                    color: PdfColor.fromInt(0xFFE11D48), // bKash Pink
+                                    borderRadius: pw.BorderRadius.all(pw.Radius.circular(3)),
+                                  ),
+                                  child: pw.Text(
+                                    'bKash Personal',
+                                    style: pw.TextStyle(color: PdfColors.white, fontSize: 8, font: fontBold),
+                                  ),
+                                ),
+                                pw.SizedBox(width: 8),
+                                pw.Text(
+                                  bill.bkashNumber,
+                                  style: pw.TextStyle(fontSize: 9.5, font: fontBold, color: primaryColor),
+                                ),
+                                pw.SizedBox(width: 6),
+                                pw.Text(
+                                  '(Option: Send Money)',
+                                  style: const pw.TextStyle(fontSize: 8, color: mutedColor),
+                                ),
+                              ],
+                            ),
+                            pw.SizedBox(height: 4),
+                            // Highlighted Cash Out Charge Alert Box
                             pw.Container(
-                              padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: const pw.BoxDecoration(
-                                color: PdfColor.fromInt(0xFFE11D48), // bKash Pink
-                                borderRadius: pw.BorderRadius.all(pw.Radius.circular(3)),
+                              padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: pw.BoxDecoration(
+                                color: const PdfColor.fromInt(0xFFFFF1F2), // Light alert rose
+                                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
+                                border: pw.Border.all(color: const PdfColor.fromInt(0xFFFDA4AF), width: 0.6),
                               ),
-                              child: pw.Text(
-                                'bKash Personal',
-                                style: pw.TextStyle(color: PdfColors.white, fontSize: 8, font: fontBold),
+                              child: pw.Row(
+                                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                                children: [
+                                  pw.Container(
+                                    width: 4,
+                                    height: 4,
+                                    decoration: const pw.BoxDecoration(
+                                      color: PdfColor.fromInt(0xFFE11D48),
+                                      shape: pw.BoxShape.circle,
+                                    ),
+                                  ),
+                                  pw.SizedBox(width: 4),
+                                  pw.Text(
+                                    'Notice: ',
+                                    style: pw.TextStyle(font: fontBold, fontSize: 7.5, color: const PdfColor.fromInt(0xFFBE123C)),
+                                  ),
+                                  pw.Expanded(
+                                    child: pw.Text(
+                                      'If payment is made via bKash Send Money, the client must add/include the applicable cash out charge.',
+                                      style: pw.TextStyle(
+                                        font: fontBold,
+                                        fontSize: 7.5,
+                                        color: const PdfColor.fromInt(0xFF9F1239),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                            pw.SizedBox(width: 8),
-                            pw.Text(
-                              bill.bkashNumber,
-                              style: pw.TextStyle(fontSize: 9.5, font: fontBold, color: primaryColor),
-                            ),
-                            pw.SizedBox(width: 6),
-                            pw.Text(
-                              '(Send Money)',
-                              style: const pw.TextStyle(fontSize: 8, color: mutedColor),
                             ),
                           ],
-                        ),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.only(top: 3, left: 4),
-                        child: pw.Text(
-                          '★ If paying via bKash, you must add the Cash Out charge.',
-                          style: pw.TextStyle(
-                            fontSize: 7.5,
-                            font: fontBold,
-                            color: const PdfColor.fromInt(0xFFBE123C), // Strong rose/red
-                          ),
                         ),
                       ),
 
@@ -514,39 +547,7 @@ class PdfInvoiceService {
           ),
           pw.SizedBox(height: 4),
           ...List.generate(bill.terms.length, (i) {
-            final isBcashCondition = i == 0 || bill.terms[i].toLowerCase().contains('cash out');
-            if (isBcashCondition) {
-              return pw.Container(
-                margin: const pw.EdgeInsets.only(bottom: 3),
-                padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                decoration: const pw.BoxDecoration(
-                  color: PdfColor.fromInt(0xFFFEF3C7), // Warm amber highlight
-                  borderRadius: pw.BorderRadius.all(pw.Radius.circular(3)),
-                  border: pw.Border.fromBorderSide(
-                    pw.BorderSide(color: PdfColor.fromInt(0xFFF59E0B), width: 0.8),
-                  ),
-                ),
-                child: pw.Row(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.SizedBox(
-                      width: 14,
-                      child: pw.Text('${i + 1}.', style: pw.TextStyle(fontSize: 8.5, font: fontBold, color: const PdfColor.fromInt(0xFFB45309))),
-                    ),
-                    pw.Expanded(
-                      child: pw.Text(
-                        bill.terms[i],
-                        style: pw.TextStyle(
-                          fontSize: 8.5,
-                          font: fontBold,
-                          color: const PdfColor.fromInt(0xFF92400E), // Bold amber-brown
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }
+            final isCashOutTerm = i == 0;
             return pw.Padding(
               padding: const pw.EdgeInsets.only(bottom: 2),
               child: pw.Row(
@@ -554,12 +555,23 @@ class PdfInvoiceService {
                 children: [
                   pw.SizedBox(
                     width: 12,
-                    child: pw.Text('${i + 1}.', style: const pw.TextStyle(fontSize: 8, color: mutedColor)),
+                    child: pw.Text(
+                      '${i + 1}.',
+                      style: pw.TextStyle(
+                        fontSize: 8,
+                        font: isCashOutTerm ? fontBold : fontRegular,
+                        color: isCashOutTerm ? const PdfColor.fromInt(0xFFBE123C) : mutedColor,
+                      ),
+                    ),
                   ),
                   pw.Expanded(
                     child: pw.Text(
                       bill.terms[i],
-                      style: const pw.TextStyle(fontSize: 8, color: textColor),
+                      style: pw.TextStyle(
+                        fontSize: 8,
+                        font: isCashOutTerm ? fontBold : fontRegular,
+                        color: isCashOutTerm ? const PdfColor.fromInt(0xFF9F1239) : textColor,
+                      ),
                     ),
                   ),
                 ],
