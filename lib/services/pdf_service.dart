@@ -10,13 +10,29 @@ class PdfInvoiceService {
   static Future<Uint8List> generateInvoicePdf(Bill bill) async {
     final pdf = pw.Document();
     final dateFormat = DateFormat('MMMM dd, yyyy');
-    final currencyFormat = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
     final now = DateTime.now();
     final printTimestamp = DateFormat('dd MMM yyyy, hh:mm a').format(now);
 
     final fontRegular = await PdfGoogleFonts.interRegular();
     final fontBold = await PdfGoogleFonts.interBold();
     final fontMedium = await PdfGoogleFonts.interMedium();
+
+    pw.Font? fontBengali;
+    pw.Font? fontBengaliBold;
+    try {
+      fontBengali = await PdfGoogleFonts.notoSansBengaliRegular();
+      fontBengaliBold = await PdfGoogleFonts.notoSansBengaliBold();
+    } catch (_) {}
+
+    final fontFallbacks = <pw.Font>[
+      fontMedium,
+      ?fontBengali,
+      ?fontBengaliBold,
+    ];
+
+    // If Bengali font is successfully loaded, use the authentic ৳ symbol; otherwise fallback safely to BDT
+    final currencySymbol = fontBengali != null ? '৳ ' : 'BDT ';
+    final currencyFormat = NumberFormat.currency(symbol: currencySymbol, decimalDigits: 0);
 
     // Load logo bytes from assets
     pw.MemoryImage? logoImage;
@@ -55,7 +71,7 @@ class PdfInvoiceService {
         theme: pw.ThemeData.withFont(
           base: fontRegular,
           bold: fontBold,
-          fontFallback: [fontMedium],
+          fontFallback: fontFallbacks,
         ),
         build: (context) => [
           // 1. Company Header with Official Logo
