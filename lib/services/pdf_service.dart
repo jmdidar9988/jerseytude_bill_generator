@@ -214,7 +214,7 @@ class PdfInvoiceService {
           pw.Divider(color: borderColor, thickness: 0.8),
           pw.SizedBox(height: 8),
 
-          // ── 2. BILL TO & PROJECT CARD ───────────────────────────
+          // ── 2. BILL TO, PROJECT & VERIFICATION CARD ─────────────
           pw.Container(
             padding: const pw.EdgeInsets.all(10),
             decoration: pw.BoxDecoration(
@@ -226,7 +226,7 @@ class PdfInvoiceService {
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                // Client Info
+                // 1. Client Info (Billed To)
                 pw.Expanded(
                   flex: 5,
                   child: pw.Column(
@@ -244,7 +244,7 @@ class PdfInvoiceService {
                       pw.SizedBox(height: 3),
                       pw.Text(
                         bill.customerName.isEmpty ? 'Walk-in Customer' : bill.customerName,
-                        style: pw.TextStyle(font: fontBold, fontSize: 12, color: textDark),
+                        style: pw.TextStyle(font: fontBold, fontSize: 11.5, color: textDark),
                       ),
                       if (bill.customerAddress.isNotEmpty) ...[
                         pw.SizedBox(height: 2),
@@ -264,11 +264,11 @@ class PdfInvoiceService {
                   ),
                 ),
 
-                // Vertical Divider
-                pw.Container(width: 0.8, height: 42, color: borderColor),
-                pw.SizedBox(width: 14),
+                // Vertical Divider 1
+                pw.Container(width: 0.8, height: 46, color: borderColor),
+                pw.SizedBox(width: 12),
 
-                // Project & Order Reference
+                // 2. Project Reference
                 pw.Expanded(
                   flex: 4,
                   child: pw.Column(
@@ -295,6 +295,38 @@ class PdfInvoiceService {
                       ),
                     ],
                   ),
+                ),
+
+                // Vertical Divider 2
+                pw.Container(width: 0.8, height: 46, color: borderColor),
+                pw.SizedBox(width: 12),
+
+                // 3. Verification QR Code (Right beside Project Reference)
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.center,
+                  children: [
+                    pw.Container(
+                      padding: const pw.EdgeInsets.all(3),
+                      decoration: pw.BoxDecoration(
+                        color: PdfColors.white,
+                        border: pw.Border.all(color: borderColor, width: 0.8),
+                        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                      ),
+                      child: pw.BarcodeWidget(
+                        barcode: pw.Barcode.qrCode(),
+                        data: qrData,
+                        width: 44,
+                        height: 44,
+                        drawText: false,
+                      ),
+                    ),
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      'Scan to Verify',
+                      textAlign: pw.TextAlign.center,
+                      style: pw.TextStyle(fontSize: 6.5, font: fontBold, color: primaryDark),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -450,7 +482,7 @@ class PdfInvoiceService {
 
           pw.SizedBox(height: 12),
 
-          // ── 5. PAYMENT INFORMATION & QR CODE ────────────────────
+          // ── 5. PAYMENT INFORMATION ──────────────────────────────
           pw.Container(
             padding: const pw.EdgeInsets.all(10),
             decoration: pw.BoxDecoration(
@@ -458,225 +490,180 @@ class PdfInvoiceService {
               border: pw.Border.all(color: borderColor, width: 0.8),
               borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
             ),
-            child: pw.Row(
+            child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                // Left: Payment Channels
-                pw.Expanded(
-                  flex: 7,
+                pw.Text(
+                  'PAYMENT INFORMATION',
+                  style: pw.TextStyle(
+                    font: fontBold,
+                    fontSize: 8.5,
+                    color: primaryNavy,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                pw.SizedBox(height: 6),
+
+                // bKash Row (Organized, clean, neutral styling)
+                pw.Container(
+                  width: double.infinity,
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.white,
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                    border: pw.Border.all(color: borderColor, width: 0.6),
+                  ),
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text(
-                        'PAYMENT INFORMATION',
-                        style: pw.TextStyle(
-                          font: fontBold,
-                          fontSize: 8.5,
-                          color: primaryNavy,
-                          letterSpacing: 0.8,
-                        ),
+                      pw.Row(
+                        children: [
+                          pw.Text(
+                            'bKash (Personal):',
+                            style: pw.TextStyle(
+                              fontSize: 8.5,
+                              font: fontBold,
+                              color: primaryDark,
+                            ),
+                          ),
+                          pw.SizedBox(width: 8),
+                          pw.Text(
+                            bill.bkashNumber,
+                            style: pw.TextStyle(
+                              fontSize: 9.5,
+                              font: fontBold,
+                              color: accentBlue,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          pw.SizedBox(width: 6),
+                          pw.Text(
+                            '(Option: Send Money)',
+                            style: const pw.TextStyle(fontSize: 8, color: textMuted),
+                          ),
+                        ],
                       ),
-                      pw.SizedBox(height: 6),
-
-                      // bKash Row (Organized, clean, neutral styling)
-                      pw.Container(
-                        padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                        decoration: pw.BoxDecoration(
-                          color: PdfColors.white,
-                          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
-                          border: pw.Border.all(color: borderColor, width: 0.6),
-                        ),
-                        child: pw.Column(
-                          crossAxisAlignment: pw.CrossAxisAlignment.start,
-                          children: [
-                            pw.Row(
-                              children: [
-                                pw.Text(
-                                  'bKash (Personal):',
-                                  style: pw.TextStyle(
-                                    fontSize: 8.5,
-                                    font: fontBold,
-                                    color: primaryDark,
-                                  ),
-                                ),
-                                pw.SizedBox(width: 8),
-                                pw.Text(
-                                  bill.bkashNumber,
-                                  style: pw.TextStyle(
-                                    fontSize: 9.5,
-                                    font: fontBold,
-                                    color: accentBlue,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                                pw.SizedBox(width: 6),
-                                pw.Text(
-                                  '(Option: Send Money)',
-                                  style: const pw.TextStyle(fontSize: 8, color: textMuted),
-                                ),
-                              ],
+                      pw.SizedBox(height: 3),
+                      pw.Row(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(
+                            '* Note: ',
+                            style: pw.TextStyle(
+                              font: fontBold,
+                              fontSize: 7.5,
+                              color: primaryNavy,
                             ),
-                            pw.SizedBox(height: 3),
-                            pw.Row(
-                              crossAxisAlignment: pw.CrossAxisAlignment.start,
-                              children: [
-                                pw.Text(
-                                  '* Note: ',
-                                  style: pw.TextStyle(
-                                    font: fontBold,
-                                    fontSize: 7.5,
-                                    color: primaryNavy,
-                                  ),
-                                ),
-                                pw.Expanded(
-                                  child: pw.Text(
-                                    'If payment is made via bKash Send Money, the client must add/include the applicable cash out charge.',
-                                    style: const pw.TextStyle(
-                                      fontSize: 7.5,
-                                      color: textBody,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                          ),
+                          pw.Expanded(
+                            child: pw.Text(
+                              'If payment is made via bKash Send Money, the client must add/include the applicable cash out charge.',
+                              style: const pw.TextStyle(
+                                fontSize: 7.5,
+                                color: textBody,
+                              ),
                             ),
-                          ],
-                        ),
-                      ),
-
-                      pw.SizedBox(height: 6),
-
-                      // Bank Transfer Card (Structured key-value layout)
-                      pw.Container(
-                        padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                        decoration: pw.BoxDecoration(
-                          color: PdfColors.white,
-                          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
-                          border: pw.Border.all(color: borderColor, width: 0.6),
-                        ),
-                        child: pw.Column(
-                          crossAxisAlignment: pw.CrossAxisAlignment.start,
-                          children: [
-                            pw.Row(
-                              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                              children: [
-                                pw.RichText(
-                                  text: pw.TextSpan(
-                                    children: [
-                                      const pw.TextSpan(
-                                        text: 'Bank: ',
-                                        style: pw.TextStyle(fontSize: 8, color: textMuted),
-                                      ),
-                                      pw.TextSpan(
-                                        text: '${bill.bankName} (${bill.bankBranch})',
-                                        style: pw.TextStyle(fontSize: 8.5, font: fontBold, color: primaryDark),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                pw.RichText(
-                                  text: pw.TextSpan(
-                                    children: [
-                                      const pw.TextSpan(
-                                        text: 'Routing: ',
-                                        style: pw.TextStyle(fontSize: 8, color: textMuted),
-                                      ),
-                                      pw.TextSpan(
-                                        text: bill.routingNumber,
-                                        style: pw.TextStyle(fontSize: 8, font: fontBold, color: primaryDark),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            pw.SizedBox(height: 4),
-                            pw.Row(
-                              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                              children: [
-                                pw.RichText(
-                                  text: pw.TextSpan(
-                                    children: [
-                                      const pw.TextSpan(
-                                        text: 'A/C Name: ',
-                                        style: pw.TextStyle(fontSize: 8, color: textMuted),
-                                      ),
-                                      pw.TextSpan(
-                                        text: bill.bankAccountName,
-                                        style: pw.TextStyle(fontSize: 8.5, font: fontBold, color: primaryDark),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                pw.RichText(
-                                  text: pw.TextSpan(
-                                    children: [
-                                      const pw.TextSpan(
-                                        text: 'A/C No: ',
-                                        style: pw.TextStyle(fontSize: 8, color: textMuted),
-                                      ),
-                                      pw.TextSpan(
-                                        text: bill.bankAccountNumber,
-                                        style: pw.TextStyle(fontSize: 8.5, font: fontBold, color: accentBlue),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                pw.RichText(
-                                  text: pw.TextSpan(
-                                    children: [
-                                      const pw.TextSpan(
-                                        text: 'SWIFT: ',
-                                        style: pw.TextStyle(fontSize: 8, color: textMuted),
-                                      ),
-                                      pw.TextSpan(
-                                        text: bill.swiftCode,
-                                        style: const pw.TextStyle(fontSize: 8, color: textMuted),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
 
-                pw.SizedBox(width: 12),
+                pw.SizedBox(height: 6),
 
-                // Right: Official QR Code Box
-                pw.Expanded(
-                  flex: 3,
+                // Bank Transfer Card (Structured key-value layout)
+                pw.Container(
+                  width: double.infinity,
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.white,
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                    border: pw.Border.all(color: borderColor, width: 0.6),
+                  ),
                   child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.center,
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Container(
-                        padding: const pw.EdgeInsets.all(5),
-                        decoration: pw.BoxDecoration(
-                          color: PdfColors.white,
-                          border: pw.Border.all(color: borderColor, width: 0.8),
-                          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
-                        ),
-                        child: pw.BarcodeWidget(
-                          barcode: pw.Barcode.qrCode(),
-                          data: qrData,
-                          width: 66,
-                          height: 66,
-                          drawText: false,
-                        ),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.RichText(
+                            text: pw.TextSpan(
+                              children: [
+                                const pw.TextSpan(
+                                  text: 'Bank: ',
+                                  style: pw.TextStyle(fontSize: 8, color: textMuted),
+                                ),
+                                pw.TextSpan(
+                                  text: '${bill.bankName} (${bill.bankBranch})',
+                                  style: pw.TextStyle(fontSize: 8.5, font: fontBold, color: primaryDark),
+                                ),
+                              ],
+                            ),
+                          ),
+                          pw.RichText(
+                            text: pw.TextSpan(
+                              children: [
+                                const pw.TextSpan(
+                                  text: 'Routing: ',
+                                  style: pw.TextStyle(fontSize: 8, color: textMuted),
+                                ),
+                                pw.TextSpan(
+                                  text: bill.routingNumber,
+                                  style: pw.TextStyle(fontSize: 8, font: fontBold, color: primaryDark),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                      pw.SizedBox(height: 3),
-                      pw.Text(
-                        'Scan to Verify Invoice',
-                        textAlign: pw.TextAlign.center,
-                        style: pw.TextStyle(fontSize: 7, font: fontBold, color: primaryDark),
-                      ),
-                      pw.Text(
-                        'Official Digital Copy',
-                        textAlign: pw.TextAlign.center,
-                        style: const pw.TextStyle(fontSize: 6.5, color: textMuted),
+                      pw.SizedBox(height: 4),
+                      pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.RichText(
+                            text: pw.TextSpan(
+                              children: [
+                                const pw.TextSpan(
+                                  text: 'A/C Name: ',
+                                  style: pw.TextStyle(fontSize: 8, color: textMuted),
+                                ),
+                                pw.TextSpan(
+                                  text: bill.bankAccountName,
+                                  style: pw.TextStyle(fontSize: 8.5, font: fontBold, color: primaryDark),
+                                ),
+                              ],
+                            ),
+                          ),
+                          pw.RichText(
+                            text: pw.TextSpan(
+                              children: [
+                                const pw.TextSpan(
+                                  text: 'A/C No: ',
+                                  style: pw.TextStyle(fontSize: 8, color: textMuted),
+                                ),
+                                pw.TextSpan(
+                                  text: bill.bankAccountNumber,
+                                  style: pw.TextStyle(fontSize: 8.5, font: fontBold, color: accentBlue),
+                                ),
+                              ],
+                            ),
+                          ),
+                          pw.RichText(
+                            text: pw.TextSpan(
+                              children: [
+                                const pw.TextSpan(
+                                  text: 'SWIFT: ',
+                                  style: pw.TextStyle(fontSize: 8, color: textMuted),
+                                ),
+                                pw.TextSpan(
+                                  text: bill.swiftCode,
+                                  style: const pw.TextStyle(fontSize: 8, color: textMuted),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
