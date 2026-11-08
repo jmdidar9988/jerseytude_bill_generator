@@ -4,6 +4,7 @@ import '../models/bill.dart';
 import '../models/order_item.dart';
 import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/number_to_words.dart';
 import '../widgets/item_dialog.dart';
 import 'invoice_preview_screen.dart';
 
@@ -20,26 +21,16 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
   final _formKey = GlobalKey<FormState>();
 
   late TextEditingController _invoiceNoController;
-  late TextEditingController _customerNameController;
-  late TextEditingController _customerPhoneController;
-  late TextEditingController _customerAddressController;
-  late TextEditingController _deliveryFeeController;
-  late TextEditingController _discountController;
-  late TextEditingController _paidAmountController;
-  late TextEditingController _notesController;
+  late TextEditingController _nameController;
+  late TextEditingController _addressController;
+  late TextEditingController _phoneController;
+  late TextEditingController _projectController;
 
   late DateTime _selectedDate;
-  String _selectedPaymentMethod = 'Cash on Delivery';
+  String _selectedStatus = 'Pending';
   List<OrderItem> _items = [];
 
-  final List<String> _paymentMethods = [
-    'Cash on Delivery',
-    'bKash (Merchant)',
-    'bKash (Personal)',
-    'Nagad',
-    'Card / POS',
-    'Bank Transfer',
-  ];
+  final List<String> _statuses = ['Pending', 'Paid', 'Partial'];
 
   @override
   void initState() {
@@ -47,27 +38,28 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
     final bill = widget.existingBill;
     if (bill != null) {
       _invoiceNoController = TextEditingController(text: bill.invoiceNumber);
-      _customerNameController = TextEditingController(text: bill.customerName);
-      _customerPhoneController = TextEditingController(text: bill.customerPhone);
-      _customerAddressController = TextEditingController(text: bill.customerAddress);
-      _deliveryFeeController = TextEditingController(text: bill.deliveryFee.toStringAsFixed(0));
-      _discountController = TextEditingController(text: bill.discount.toStringAsFixed(0));
-      _paidAmountController = TextEditingController(text: bill.paidAmount.toStringAsFixed(0));
-      _notesController = TextEditingController(text: bill.notes);
-      _selectedDate = bill.createdAt;
-      _selectedPaymentMethod = bill.paymentMethod;
+      _nameController = TextEditingController(text: bill.customerName);
+      _addressController = TextEditingController(text: bill.customerAddress);
+      _phoneController = TextEditingController(text: bill.customerPhone);
+      _projectController = TextEditingController(text: bill.project);
+      _selectedDate = bill.date;
+      _selectedStatus = bill.paymentStatus;
       _items = List.from(bill.items);
     } else {
       _invoiceNoController = TextEditingController();
-      _customerNameController = TextEditingController();
-      _customerPhoneController = TextEditingController();
-      _customerAddressController = TextEditingController();
-      _deliveryFeeController = TextEditingController(text: '0');
-      _discountController = TextEditingController(text: '0');
-      _paidAmountController = TextEditingController(text: '0');
-      _notesController = TextEditingController(text: 'Thank you for choosing Jerseytude!');
+      _nameController = TextEditingController(text: 'Jisan');
+      _addressController = TextEditingController(text: 'Sunamganj');
+      _phoneController = TextEditingController(text: '+880 1648725556');
+      _projectController = TextEditingController(text: 'Custom Sports Apparel');
       _selectedDate = DateTime.now();
-
+      _items = [
+        OrderItem(
+          id: 'item-1',
+          description: 'Leaf Jacquard Polo Full Sleeve Jersey',
+          quantity: 28,
+          unitPrice: 420.0,
+        ),
+      ];
       _generateInvoiceNumber();
     }
   }
@@ -84,73 +76,51 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
   @override
   void dispose() {
     _invoiceNoController.dispose();
-    _customerNameController.dispose();
-    _customerPhoneController.dispose();
-    _customerAddressController.dispose();
-    _deliveryFeeController.dispose();
-    _discountController.dispose();
-    _paidAmountController.dispose();
-    _notesController.dispose();
+    _nameController.dispose();
+    _addressController.dispose();
+    _phoneController.dispose();
+    _projectController.dispose();
     super.dispose();
   }
 
-  double get _subtotal => _items.fold(0.0, (sum, item) => sum + item.totalPrice);
-  double get _deliveryFee => double.tryParse(_deliveryFeeController.text) ?? 0.0;
-  double get _discount => double.tryParse(_discountController.text) ?? 0.0;
-  double get _paidAmount => double.tryParse(_paidAmountController.text) ?? 0.0;
-  double get _grandTotal {
-    final total = _subtotal + _deliveryFee - _discount;
-    return total < 0 ? 0.0 : total;
-  }
-  double get _dueAmount {
-    final due = _grandTotal - _paidAmount;
-    return due < 0 ? 0.0 : due;
-  }
+  double get _grandTotal => _items.fold(0.0, (sum, i) => sum + i.totalPrice);
+  int get _totalQuantity => _items.fold(0, (sum, i) => sum + i.quantity);
 
   void _addItem() async {
     final result = await showDialog<OrderItem>(
       context: context,
-      builder: (ctx) => const ItemDialog(),
+      builder: (_) => const ItemDialog(),
     );
     if (result != null) {
-      setState(() {
-        _items.add(result);
-      });
+      setState(() => _items.add(result));
     }
   }
 
   void _editItem(int index) async {
     final result = await showDialog<OrderItem>(
       context: context,
-      builder: (ctx) => ItemDialog(existingItem: _items[index]),
+      builder: (_) => ItemDialog(existingItem: _items[index]),
     );
     if (result != null) {
-      setState(() {
-        _items[index] = result;
-      });
+      setState(() => _items[index] = result);
     }
   }
 
-  void _removeItem(int index) {
-    setState(() {
-      _items.removeAt(index);
-    });
+  void _deleteItem(int index) {
+    setState(() => _items.removeAt(index));
   }
 
   Bill _buildBill() {
     return Bill(
       id: widget.existingBill?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-      invoiceNumber: _invoiceNoController.text.trim().isEmpty ? 'JT-0001' : _invoiceNoController.text.trim(),
-      createdAt: _selectedDate,
-      customerName: _customerNameController.text.trim(),
-      customerPhone: _customerPhoneController.text.trim(),
-      customerAddress: _customerAddressController.text.trim(),
+      invoiceNumber: _invoiceNoController.text.trim().isEmpty ? 'JT-2026-1029' : _invoiceNoController.text.trim(),
+      date: _selectedDate,
+      paymentStatus: _selectedStatus,
+      customerName: _nameController.text.trim(),
+      customerAddress: _addressController.text.trim(),
+      customerPhone: _phoneController.text.trim(),
+      project: _projectController.text.trim(),
       items: _items,
-      deliveryFee: _deliveryFee,
-      discount: _discount,
-      paidAmount: _paidAmount,
-      paymentMethod: _selectedPaymentMethod,
-      notes: _notesController.text.trim(),
     );
   }
 
@@ -158,7 +128,7 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
     if (_items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please add at least one jersey/item to the bill.'),
+          content: Text('Please add at least one item to the invoice.'),
           backgroundColor: AppTheme.danger,
         ),
       );
@@ -189,11 +159,12 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final currency = NumberFormat.currency(symbol: '৳ ', decimalDigits: 0);
+    final currency = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
+    final dateFormat = DateFormat('MMMM dd, yyyy');
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.existingBill == null ? 'Create New Bill' : 'Edit Bill'),
+        title: Text(widget.existingBill == null ? 'Create Invoice' : 'Edit Invoice'),
         actions: [
           IconButton(
             icon: const Icon(Icons.picture_as_pdf),
@@ -212,29 +183,24 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Invoice Details Card
+                  // Invoice Meta Card
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Row(
-                            children: [
-                              Icon(Icons.receipt, color: AppTheme.accent, size: 20),
-                              SizedBox(width: 8),
-                              Text('Invoice Details', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                            ],
-                          ),
+                          const Text('INVOICE INFO', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
                           const Divider(height: 20),
                           Row(
                             children: [
                               Expanded(
-                                flex: 2,
+                                flex: 3,
                                 child: TextFormField(
                                   controller: _invoiceNoController,
                                   decoration: const InputDecoration(
-                                    labelText: 'Invoice #',
+                                    labelText: 'Invoice No',
+                                    hintText: 'JT-2026-1029',
                                     prefixIcon: Icon(Icons.tag, size: 18),
                                   ),
                                   validator: (v) => v == null || v.isEmpty ? 'Required' : null,
@@ -260,73 +226,28 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                                       labelText: 'Date',
                                       prefixIcon: Icon(Icons.calendar_today, size: 18),
                                     ),
-                                    child: Text(
-                                      DateFormat('dd MMM yyyy').format(_selectedDate),
-                                      style: const TextStyle(fontSize: 13),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 14),
-
-                  // Customer Details Card
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Row(
-                            children: [
-                              Icon(Icons.person_pin, color: AppTheme.accent, size: 20),
-                              SizedBox(width: 8),
-                              Text('Customer Information', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                            ],
-                          ),
-                          const Divider(height: 20),
-                          Row(
-                            children: [
-                              Expanded(
-                                flex: 3,
-                                child: TextFormField(
-                                  controller: _customerNameController,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Customer Name',
-                                    hintText: 'e.g. Tanvir Ahmed',
-                                    prefixIcon: Icon(Icons.person, size: 18),
+                                    child: Text(dateFormat.format(_selectedDate), style: const TextStyle(fontSize: 13)),
                                   ),
                                 ),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
                                 flex: 2,
-                                child: TextFormField(
-                                  controller: _customerPhoneController,
-                                  keyboardType: TextInputType.phone,
+                                child: DropdownButtonFormField<String>(
+                                  initialValue: _selectedStatus,
                                   decoration: const InputDecoration(
-                                    labelText: 'Phone Number',
-                                    hintText: '017XXXXXXXX',
-                                    prefixIcon: Icon(Icons.phone, size: 18),
+                                    labelText: 'Status',
+                                    prefixIcon: Icon(Icons.check_circle_outline, size: 18),
                                   ),
+                                  items: _statuses
+                                      .map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 13))))
+                                      .toList(),
+                                  onChanged: (v) {
+                                    if (v != null) setState(() => _selectedStatus = v);
+                                  },
                                 ),
                               ),
                             ],
-                          ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _customerAddressController,
-                            decoration: const InputDecoration(
-                              labelText: 'Delivery Address / Location',
-                              hintText: 'e.g. House 12, Road 4, Dhanmondi, Dhaka',
-                              prefixIcon: Icon(Icons.location_on, size: 18),
-                            ),
                           ),
                         ],
                       ),
@@ -335,7 +256,79 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
 
                   const SizedBox(height: 14),
 
-                  // Ordered Items Card
+                  // Bill To Card
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('BILL TO:', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                          const Divider(height: 20),
+                          Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: TextFormField(
+                                  controller: _nameController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Name *',
+                                    hintText: 'Jisan',
+                                    prefixIcon: Icon(Icons.person_outline, size: 18),
+                                  ),
+                                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                flex: 2,
+                                child: TextFormField(
+                                  controller: _phoneController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Phone',
+                                    hintText: '+880 1648725556',
+                                    prefixIcon: Icon(Icons.phone_outlined, size: 18),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: TextFormField(
+                                  controller: _addressController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Address',
+                                    hintText: 'Sunamganj',
+                                    prefixIcon: Icon(Icons.location_on_outlined, size: 18),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                flex: 3,
+                                child: TextFormField(
+                                  controller: _projectController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Project',
+                                    hintText: 'Custom Sports Apparel',
+                                    prefixIcon: Icon(Icons.folder_outlined, size: 18),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  // Order Details Table Card
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
@@ -345,19 +338,13 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Row(
-                                children: [
-                                  const Icon(Icons.shopping_bag, color: AppTheme.accent, size: 20),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Jersey & Apparel Items (${_items.length})',
-                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                                  ),
-                                ],
+                              Text(
+                                'Order Details (${_items.length} items, $_totalQuantity pcs)',
+                                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                               ),
                               ElevatedButton.icon(
-                                icon: const Icon(Icons.add, size: 18),
-                                label: const Text('Add Jersey'),
+                                icon: const Icon(Icons.add, size: 16),
+                                label: const Text('Add Item'),
                                 onPressed: _addItem,
                               ),
                             ],
@@ -365,23 +352,10 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                           const Divider(height: 20),
 
                           if (_items.isEmpty)
-                            Container(
-                              padding: const EdgeInsets.symmetric(vertical: 32),
-                              alignment: Alignment.center,
-                              child: Column(
-                                children: [
-                                  Icon(Icons.sports_soccer_outlined, size: 48, color: Colors.grey.shade400),
-                                  const SizedBox(height: 8),
-                                  const Text(
-                                    'No jerseys added yet',
-                                    style: TextStyle(fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  const Text(
-                                    'Click "Add Jersey" to add items to this invoice.',
-                                    style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-                                  ),
-                                ],
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 24),
+                              child: Center(
+                                child: Text('No items added yet. Click "Add Item" above.'),
                               ),
                             )
                           else
@@ -393,50 +367,15 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                               itemBuilder: (context, index) {
                                 final item = _items[index];
                                 return ListTile(
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                                  leading: CircleAvatar(
-                                    backgroundColor: AppTheme.accentLight,
-                                    child: Text(
-                                      item.size,
-                                      style: const TextStyle(
-                                        color: AppTheme.accent,
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ),
-                                  title: Text(
-                                    item.name,
-                                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                                  ),
-                                  subtitle: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '${item.edition} • Qty: ${item.quantity} × ৳${item.unitPrice.toStringAsFixed(0)}',
-                                        style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                                      ),
-                                      if (item.hasCustomization)
-                                        Text(
-                                          item.customizationSummary,
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                            color: AppTheme.accent,
-                                          ),
-                                        ),
-                                    ],
-                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                  title: Text(item.description, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                  subtitle: Text('Qty: ${item.quantity}   |   Unit Price: ${currency.format(item.unitPrice)}'),
                                   trailing: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Text(
                                         currency.format(item.totalPrice),
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 14,
-                                          color: AppTheme.primary,
-                                        ),
+                                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
                                       ),
                                       const SizedBox(width: 8),
                                       IconButton(
@@ -445,13 +384,81 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                                       ),
                                       IconButton(
                                         icon: const Icon(Icons.delete_outline, size: 18, color: AppTheme.danger),
-                                        onPressed: () => _removeItem(index),
+                                        onPressed: () => _deleteItem(index),
                                       ),
                                     ],
                                   ),
                                 );
                               },
                             ),
+
+                          const SizedBox(height: 16),
+                          const Divider(),
+
+                          // Grand Total Summary Box
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppTheme.border),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'Grand Total Summary',
+                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                                ),
+                                Text(
+                                  currency.format(_grandTotal),
+                                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppTheme.primary),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 12),
+
+                          // Amount in words
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppTheme.accentLight.withValues(alpha: 0.5),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(Icons.spellcheck, size: 18, color: AppTheme.accent),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: RichText(
+                                    text: TextSpan(
+                                      children: [
+                                        const TextSpan(
+                                          text: 'Total Payable Amount in Words:\n',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppTheme.accent,
+                                          ),
+                                        ),
+                                        TextSpan(
+                                          text: NumberToWords.convert(_grandTotal),
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppTheme.textPrimary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -459,224 +466,34 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
 
                   const SizedBox(height: 14),
 
-                  // Payment & Financials Card
+                  // Company, Payment & Terms info summary
                   Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Row(
-                            children: [
-                              Icon(Icons.payments_outlined, color: AppTheme.accent, size: 20),
-                              SizedBox(width: 8),
-                              Text('Payment & Financials', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                            ],
-                          ),
-                          const Divider(height: 20),
-
-                          // Subtotal display
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text('Subtotal:', style: TextStyle(fontSize: 14, color: AppTheme.textSecondary)),
-                              Text(currency.format(_subtotal), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Delivery Fee with quick presets
-                          Row(
-                            children: [
-                              Expanded(
-                                flex: 3,
-                                child: TextFormField(
-                                  controller: _deliveryFeeController,
-                                  keyboardType: TextInputType.number,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Delivery Charge (BDT)',
-                                    prefixText: '৳ ',
-                                  ),
-                                  onChanged: (_) => setState(() {}),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                flex: 4,
-                                child: Wrap(
-                                  spacing: 4,
-                                  children: [
-                                    ActionChip(
-                                      label: const Text('৳0 Free', style: TextStyle(fontSize: 10)),
-                                      onPressed: () => setState(() => _deliveryFeeController.text = '0'),
-                                    ),
-                                    ActionChip(
-                                      label: const Text('৳80 Dhaka', style: TextStyle(fontSize: 10)),
-                                      onPressed: () => setState(() => _deliveryFeeController.text = '80'),
-                                    ),
-                                    ActionChip(
-                                      label: const Text('৳150 Out', style: TextStyle(fontSize: 10)),
-                                      onPressed: () => setState(() => _deliveryFeeController.text = '150'),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          // Discount
-                          TextFormField(
-                            controller: _discountController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Discount (BDT)',
-                              prefixText: '৳ ',
-                            ),
-                            onChanged: (_) => setState(() {}),
-                          ),
-
-                          const SizedBox(height: 14),
-                          const Divider(),
-                          const SizedBox(height: 6),
-
-                          // Grand Total Banner
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: AppTheme.primary,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text(
-                                  'Grand Total',
-                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white),
-                                ),
-                                Text(
-                                  currency.format(_grandTotal),
-                                  style: const TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          const SizedBox(height: 14),
-
-                          // Paid Amount & Quick Buttons
-                          Row(
-                            children: [
-                              Expanded(
-                                flex: 3,
-                                child: TextFormField(
-                                  controller: _paidAmountController,
-                                  keyboardType: TextInputType.number,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Paid / Advance (BDT)',
-                                    prefixText: '৳ ',
-                                  ),
-                                  onChanged: (_) => setState(() {}),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                flex: 4,
-                                child: Wrap(
-                                  spacing: 4,
-                                  children: [
-                                    ActionChip(
-                                      label: const Text('Full Paid', style: TextStyle(fontSize: 10)),
-                                      onPressed: () => setState(() => _paidAmountController.text = _grandTotal.toStringAsFixed(0)),
-                                    ),
-                                    ActionChip(
-                                      label: const Text('50% Adv', style: TextStyle(fontSize: 10)),
-                                      onPressed: () => setState(() => _paidAmountController.text = (_grandTotal / 2).toStringAsFixed(0)),
-                                    ),
-                                    ActionChip(
-                                      label: const Text('৳0 Due', style: TextStyle(fontSize: 10)),
-                                      onPressed: () => setState(() => _paidAmountController.text = '0'),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          // Balance Due Banner
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: _dueAmount > 0 ? AppTheme.dangerLight : AppTheme.successLight,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: _dueAmount > 0 ? AppTheme.danger.withValues(alpha: 0.3) : AppTheme.success.withValues(alpha: 0.3),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  _dueAmount > 0 ? 'Balance Due to Collect:' : 'Payment Status:',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: _dueAmount > 0 ? AppTheme.danger : AppTheme.success,
-                                  ),
-                                ),
-                                Text(
-                                  _dueAmount > 0 ? currency.format(_dueAmount) : 'FULL PAID ✓',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w800,
-                                    color: _dueAmount > 0 ? AppTheme.danger : AppTheme.success,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          const SizedBox(height: 14),
-
-                          // Payment Method
-                          DropdownButtonFormField<String>(
-                            initialValue: _selectedPaymentMethod,
-                            decoration: const InputDecoration(
-                              labelText: 'Payment Method',
-                              prefixIcon: Icon(Icons.account_balance_wallet, size: 18),
-                            ),
-                            items: _paymentMethods.map((m) => DropdownMenuItem(value: m, child: Text(m, style: const TextStyle(fontSize: 13)))).toList(),
-                            onChanged: (val) {
-                              if (val != null) setState(() => _selectedPaymentMethod = val);
-                            },
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          // Notes
-                          TextFormField(
-                            controller: _notesController,
-                            maxLines: 2,
-                            decoration: const InputDecoration(
-                              labelText: 'Notes / Return Policy Terms',
-                              prefixIcon: Icon(Icons.notes, size: 18),
-                            ),
-                          ),
-                        ],
+                    child: ExpansionTile(
+                      leading: const Icon(Icons.info_outline, color: AppTheme.accent),
+                      title: const Text(
+                        'Jerseytude Payment Methods & Terms (Included in Invoice)',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                       ),
+                      childrenPadding: const EdgeInsets.all(16),
+                      children: const [
+                        Text(
+                          'Payment Methods Included:\n'
+                          '1. bKash (Personal) - 01319923519 (Send Money)\n'
+                          '2. Bank Transfer - BRAC Bank PLC (JIBRAN MASUM DIDAR, A/C: 1078825920001, Routing: 060914152)\n\n'
+                          'Terms & Conditions:\n'
+                          '1. If payment is made via bKash Send Money, the client must add/include the applicable cash out charge.\n'
+                          '2. Kindly share a transaction screenshot or payment clearance slip once the transfer is completed.\n'
+                          '3. Verify all player typography names, numbers, and sizing distribution charts prior to final manufacturing layout sign-off.\n'
+                          '4. Thank you for choosing JerseyTude for your custom sports apparel.',
+                          style: TextStyle(fontSize: 11, height: 1.5, color: AppTheme.textSecondary),
+                        ),
+                      ],
                     ),
                   ),
 
                   const SizedBox(height: 24),
 
-                  // Bottom Buttons
+                  // Buttons
                   Row(
                     children: [
                       Expanded(
@@ -707,4 +524,3 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
     );
   }
 }
-

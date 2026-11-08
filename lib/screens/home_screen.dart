@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/bill.dart';
-import '../models/order_item.dart';
 import '../services/pdf_service.dart';
 import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
@@ -22,7 +21,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Bill> _filteredBills = [];
   bool _isLoading = true;
   String _searchQuery = '';
-  String _selectedFilter = 'All'; // All, Due, Partial, Paid
+  String _selectedFilter = 'All'; // All, Pending, Paid, Partial
 
   final TextEditingController _searchController = TextEditingController();
 
@@ -54,15 +53,16 @@ class _HomeScreenState extends State<HomeScreen> {
       final matchesQuery = query.isEmpty ||
           b.invoiceNumber.toLowerCase().contains(query) ||
           b.customerName.toLowerCase().contains(query) ||
-          b.customerPhone.toLowerCase().contains(query);
+          b.customerPhone.toLowerCase().contains(query) ||
+          b.project.toLowerCase().contains(query);
 
       bool matchesStatus = true;
-      if (_selectedFilter == 'Paid') {
-        matchesStatus = b.status == PaymentStatus.paid;
+      if (_selectedFilter == 'Pending') {
+        matchesStatus = b.paymentStatus.toLowerCase() == 'pending';
+      } else if (_selectedFilter == 'Paid') {
+        matchesStatus = b.paymentStatus.toLowerCase() == 'paid';
       } else if (_selectedFilter == 'Partial') {
-        matchesStatus = b.status == PaymentStatus.partial;
-      } else if (_selectedFilter == 'Due') {
-        matchesStatus = b.status == PaymentStatus.due;
+        matchesStatus = b.paymentStatus.toLowerCase() == 'partial';
       }
 
       return matchesQuery && matchesStatus;
@@ -72,8 +72,8 @@ class _HomeScreenState extends State<HomeScreen> {
   double get _totalRevenue =>
       _allBills.fold(0.0, (sum, b) => sum + b.grandTotal);
 
-  double get _totalDue =>
-      _allBills.fold(0.0, (sum, b) => sum + b.dueAmount);
+  int get _totalPendingCount =>
+      _allBills.where((b) => b.paymentStatus.toLowerCase() == 'pending').length;
 
   void _openCreateBill([Bill? existing]) async {
     final result = await Navigator.of(context).push<bool>(
@@ -115,93 +115,50 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _addDemoBill() async {
-    final nextNo = await StorageService.getNextInvoiceNumber();
-    final demoBill = Bill(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      invoiceNumber: nextNo,
-      createdAt: DateTime.now(),
-      customerName: 'Shakib Al Hasan',
-      customerPhone: '01711223344',
-      customerAddress: 'Mirpur DOHS, Dhaka',
-      items: [
-        OrderItem(
-          id: '1',
-          name: 'Argentina 3-Star 2024 Home Jersey',
-          size: 'XL',
-          customName: 'MESSI',
-          customNumber: '10',
-          edition: 'Player Version',
-          quantity: 1,
-          unitPrice: 1150.0,
-        ),
-        OrderItem(
-          id: '2',
-          name: 'Real Madrid 24/25 Home Jersey',
-          size: 'L',
-          customName: 'MBAPPE',
-          customNumber: '9',
-          edition: 'Fan Version',
-          quantity: 2,
-          unitPrice: 850.0,
-        ),
-      ],
-      deliveryFee: 80.0,
-      discount: 100.0,
-      paidAmount: 1500.0,
-      paymentMethod: 'bKash (Merchant)',
-      notes: 'Custom names & numbers checked. Deliver before weekend match.',
-    );
-    await StorageService.saveBill(demoBill);
+  Future<void> _restoreDemoBill() async {
+    final demo = StorageService.getDemoBill();
+    await StorageService.saveBill(demo);
     _loadBills();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Demo invoice JT-2026-1029 added!')),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final currency = NumberFormat.compactCurrency(symbol: '৳ ', decimalDigits: 0);
+    final currency = NumberFormat.compactCurrency(symbol: '৳', decimalDigits: 0);
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: AppTheme.accent,
-                borderRadius: BorderRadius.circular(8),
+            Text(
+              'JERSEYTUDE',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.5,
               ),
-              child: const Icon(Icons.sports_soccer, color: Colors.white, size: 20),
             ),
-            const SizedBox(width: 10),
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'JERSEYTUDE',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.5,
-                  ),
-                ),
-                Text(
-                  'Invoice & Bill Generator',
-                  style: TextStyle(fontSize: 10, color: Colors.white70),
-                ),
-              ],
+            Text(
+              'Custom Jersey Maker • Invoice Generator',
+              style: TextStyle(fontSize: 10, color: Colors.white70),
             ),
           ],
         ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
+            tooltip: 'Refresh Invoices',
             onPressed: _loadBills,
           ),
           IconButton(
-            icon: const Icon(Icons.post_add),
-            tooltip: 'Add Demo Sample Bill',
-            onPressed: _addDemoBill,
+            icon: const Icon(Icons.restore_page),
+            tooltip: 'Add Demo Invoice (JT-2026-1029)',
+            onPressed: _restoreDemoBill,
           ),
         ],
       ),
@@ -210,7 +167,7 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: AppTheme.accent,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
-        label: const Text('Create Bill', style: TextStyle(fontWeight: FontWeight.w700)),
+        label: const Text('New Invoice', style: TextStyle(fontWeight: FontWeight.w700)),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -221,7 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: const EdgeInsets.all(16),
                 child: Center(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 900),
+                    constraints: const BoxConstraints(maxWidth: 850),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -246,9 +203,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 Expanded(
                                   flex: isWide ? 1 : 0,
                                   child: StatCard(
-                                    title: 'Total Revenue',
+                                    title: 'Total Amount',
                                     value: currency.format(_totalRevenue),
-                                    icon: Icons.monetization_on,
+                                    icon: Icons.payments,
                                     color: AppTheme.success,
                                     bgColor: AppTheme.successLight,
                                   ),
@@ -257,11 +214,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                 Expanded(
                                   flex: isWide ? 1 : 0,
                                   child: StatCard(
-                                    title: 'Pending Due',
-                                    value: currency.format(_totalDue),
+                                    title: 'Pending Invoices',
+                                    value: '$_totalPendingCount',
                                     icon: Icons.pending_actions,
-                                    color: AppTheme.danger,
-                                    bgColor: AppTheme.dangerLight,
+                                    color: AppTheme.warning,
+                                    bgColor: AppTheme.warningLight,
                                   ),
                                 ),
                               ],
@@ -280,7 +237,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 TextField(
                                   controller: _searchController,
                                   decoration: InputDecoration(
-                                    hintText: 'Search by Customer Name, Phone, or Invoice #...',
+                                    hintText: 'Search by Customer, Phone, Project, or Invoice No...',
                                     prefixIcon: const Icon(Icons.search, size: 20),
                                     suffixIcon: _searchQuery.isNotEmpty
                                         ? IconButton(
@@ -309,7 +266,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     const SizedBox(width: 6),
                                     Wrap(
                                       spacing: 8,
-                                      children: ['All', 'Due', 'Partial', 'Paid'].map((f) {
+                                      children: ['All', 'Pending', 'Paid', 'Partial'].map((f) {
                                         final isSelected = _selectedFilter == f;
                                         return FilterChip(
                                           label: Text(f, style: TextStyle(
@@ -381,16 +338,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                   'No invoices found',
                                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
                                 ),
-                                const SizedBox(height: 6),
-                                const Text(
-                                  'Create a new bill or click "Add Demo Sample Bill" above to test.',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-                                ),
                                 const SizedBox(height: 16),
                                 ElevatedButton.icon(
                                   icon: const Icon(Icons.add, size: 18),
-                                  label: const Text('Create First Bill'),
+                                  label: const Text('Create New Invoice'),
                                   onPressed: () => _openCreateBill(),
                                 ),
                               ],
@@ -429,4 +380,3 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
-

@@ -21,24 +21,20 @@ class BillCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dateFormat = DateFormat('dd MMM yyyy, hh:mm a');
+    final dateFormat = DateFormat('MMMM dd, yyyy');
     final currency = NumberFormat.currency(symbol: '৳ ', decimalDigits: 0);
 
     Color statusColor;
     Color statusBg;
-    switch (bill.status) {
-      case PaymentStatus.paid:
-        statusColor = AppTheme.success;
-        statusBg = AppTheme.successLight;
-        break;
-      case PaymentStatus.partial:
-        statusColor = AppTheme.warning;
-        statusBg = AppTheme.warningLight;
-        break;
-      case PaymentStatus.due:
-        statusColor = AppTheme.danger;
-        statusBg = AppTheme.dangerLight;
-        break;
+    if (bill.paymentStatus.toLowerCase() == 'paid') {
+      statusColor = AppTheme.success;
+      statusBg = AppTheme.successLight;
+    } else if (bill.paymentStatus.toLowerCase() == 'partial') {
+      statusColor = AppTheme.accent;
+      statusBg = AppTheme.accentLight;
+    } else {
+      statusColor = AppTheme.warning;
+      statusBg = AppTheme.warningLight;
     }
 
     return Card(
@@ -51,7 +47,7 @@ class BillCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Top Row: Invoice #, Date & Status
+              // Top Row: Invoice No, Date & Status
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -78,7 +74,7 @@ class BillCard extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            dateFormat.format(bill.createdAt),
+                            dateFormat.format(bill.date),
                             style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
                           ),
                         ],
@@ -93,7 +89,7 @@ class BillCard extends StatelessWidget {
                       border: Border.all(color: statusColor.withValues(alpha: 0.3)),
                     ),
                     child: Text(
-                      bill.statusText,
+                      bill.paymentStatus,
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
@@ -106,7 +102,7 @@ class BillCard extends StatelessWidget {
 
               const Divider(height: 20),
 
-              // Customer & Item info
+              // Customer & Project Info
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -115,36 +111,29 @@ class BillCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.person, size: 14, color: AppTheme.textSecondary),
-                            const SizedBox(width: 4),
-                            Text(
-                              bill.customerName.isEmpty ? 'Walk-in Customer' : bill.customerName,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: AppTheme.textPrimary,
-                              ),
-                            ),
-                          ],
+                        Text(
+                          bill.customerName,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.textPrimary,
+                          ),
                         ),
-                        if (bill.customerPhone.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          '${bill.customerAddress} • ${bill.customerPhone}',
+                          style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                        ),
+                        if (bill.project.isNotEmpty) ...[
                           const SizedBox(height: 2),
-                          Row(
-                            children: [
-                              const Icon(Icons.phone, size: 14, color: AppTheme.textSecondary),
-                              const SizedBox(width: 4),
-                              Text(
-                                bill.customerPhone,
-                                style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
-                              ),
-                            ],
+                          Text(
+                            'Project: ${bill.project}',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: AppTheme.accent),
                           ),
                         ],
                         const SizedBox(height: 6),
                         Text(
-                          '${bill.items.length} items (${bill.totalQuantity} jerseys) • ${bill.paymentMethod}',
+                          '${bill.items.length} items (${bill.totalQuantity} pcs total)',
                           style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                         ),
                       ],
@@ -153,32 +142,18 @@ class BillCard extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
+                      const Text(
+                        'Total Amount',
+                        style: TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+                      ),
                       Text(
                         currency.format(bill.grandTotal),
                         style: const TextStyle(
-                          fontSize: 17,
+                          fontSize: 18,
                           fontWeight: FontWeight.w800,
                           color: AppTheme.primary,
                         ),
                       ),
-                      if (bill.dueAmount > 0)
-                        Text(
-                          'Due: ${currency.format(bill.dueAmount)}',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.danger,
-                          ),
-                        )
-                      else
-                        const Text(
-                          'Fully Paid',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.success,
-                          ),
-                        ),
                     ],
                   ),
                 ],
@@ -219,4 +194,3 @@ class BillCard extends StatelessWidget {
     );
   }
 }
-
