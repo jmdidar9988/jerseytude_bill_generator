@@ -640,6 +640,7 @@ class PdfInvoiceService {
                           data: qrData,
                           width: 66,
                           height: 66,
+                          drawText: false,
                         ),
                       ),
                       pw.SizedBox(height: 3),
