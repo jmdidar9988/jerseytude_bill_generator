@@ -27,7 +27,6 @@ class AppTheme {
         surface: surface,
       ),
       scaffoldBackgroundColor: background,
-      fontFamily: 'Segoe UI',
       appBarTheme: const AppBarTheme(
         backgroundColor: primary,
         foregroundColor: Colors.white,

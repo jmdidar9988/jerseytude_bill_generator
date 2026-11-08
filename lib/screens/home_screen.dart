@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/bill.dart';
+import '../services/database_service.dart';
 import '../services/pdf_service.dart';
-import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/bill_card.dart';
 import '../widgets/stat_card.dart';
+import 'analytics_screen.dart';
 import 'create_bill_screen.dart';
 import 'invoice_preview_screen.dart';
 
@@ -39,7 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadBills() async {
     setState(() => _isLoading = true);
-    final bills = await StorageService.loadBills();
+    final bills = await DatabaseService.getAllBills();
     setState(() {
       _allBills = bills;
       _applyFilter();
@@ -75,6 +76,17 @@ class _HomeScreenState extends State<HomeScreen> {
   int get _totalPendingCount =>
       _allBills.where((b) => b.paymentStatus.toLowerCase() == 'pending').length;
 
+  int get _totalJerseys =>
+      _allBills.fold(0, (sum, b) => sum + b.totalQuantity);
+
+  void _openAnalytics() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AnalyticsScreen(allBills: _allBills),
+      ),
+    );
+  }
+
   void _openCreateBill([Bill? existing]) async {
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => CreateBillScreen(existingBill: existing)),
@@ -105,7 +117,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (confirm == true) {
-      await StorageService.deleteBill(bill.id);
+      await DatabaseService.deleteBill(bill.id);
       _loadBills();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -116,8 +128,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _restoreDemoBill() async {
-    final demo = StorageService.getDemoBill();
-    await StorageService.saveBill(demo);
+    final demo = DatabaseService.getDemoBill();
+    await DatabaseService.saveBill(demo);
     _loadBills();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -144,12 +156,17 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             Text(
-              'Custom Jersey Maker • Invoice Generator',
+              'Custom Jersey Maker • Invoice & Business System',
               style: TextStyle(fontSize: 10, color: Colors.white70),
             ),
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.analytics_outlined),
+            tooltip: 'Monthly Analysis',
+            onPressed: _openAnalytics,
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh Invoices',
@@ -157,7 +174,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.restore_page),
-            tooltip: 'Add Demo Invoice (JT-2026-1029)',
+            tooltip: 'Add Demo Invoice',
             onPressed: _restoreDemoBill,
           ),
         ],
@@ -182,6 +199,49 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        // Analytics Quick Access Banner
+                        InkWell(
+                          onTap: _openAnalytics,
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [AppTheme.primary, Color(0xFF1E3A8A)],
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.query_stats, color: Colors.white, size: 28),
+                                SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Monthly Business Analysis',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      Text(
+                                        'View monthly sales breakdown, collection rate & top-selling jerseys',
+                                        style: TextStyle(color: Colors.white70, fontSize: 11),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
                         // Dashboard Summary Stats
                         LayoutBuilder(
                           builder: (context, constraints) {
@@ -203,7 +263,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 Expanded(
                                   flex: isWide ? 1 : 0,
                                   child: StatCard(
-                                    title: 'Total Amount',
+                                    title: 'Total Revenue',
                                     value: currency.format(_totalRevenue),
                                     icon: Icons.payments,
                                     color: AppTheme.success,
@@ -214,7 +274,18 @@ class _HomeScreenState extends State<HomeScreen> {
                                 Expanded(
                                   flex: isWide ? 1 : 0,
                                   child: StatCard(
-                                    title: 'Pending Invoices',
+                                    title: 'Jerseys Produced',
+                                    value: '$_totalJerseys pcs',
+                                    icon: Icons.sports_soccer,
+                                    color: AppTheme.accent,
+                                    bgColor: AppTheme.accentLight,
+                                  ),
+                                ),
+                                if (isWide) const SizedBox(width: 12) else const SizedBox(height: 8),
+                                Expanded(
+                                  flex: isWide ? 1 : 0,
+                                  child: StatCard(
+                                    title: 'Pending Bills',
                                     value: '$_totalPendingCount',
                                     icon: Icons.pending_actions,
                                     color: AppTheme.warning,
@@ -303,7 +374,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              'Invoices (${_filteredBills.length})',
+                              'Database Records (${_filteredBills.length})',
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
@@ -335,7 +406,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 Icon(Icons.receipt_long_outlined, size: 56, color: Colors.grey.shade400),
                                 const SizedBox(height: 12),
                                 const Text(
-                                  'No invoices found',
+                                  'No invoices found in database',
                                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
                                 ),
                                 const SizedBox(height: 16),

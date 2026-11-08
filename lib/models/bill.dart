@@ -16,6 +16,13 @@ class Bill {
   // Order Details
   List<OrderItem> items;
 
+  // Financials
+  double deliveryFee;
+  double discount;
+  double paidAmount;
+  String paymentMethod;
+  String notes;
+
   // Company Details (Defaulted to Jerseytude)
   String companyName;
   String companyTagline;
@@ -47,6 +54,11 @@ class Bill {
     this.customerPhone = '+880 1648725556',
     this.project = 'Custom Sports Apparel',
     required this.items,
+    this.deliveryFee = 0.0,
+    this.discount = 0.0,
+    double? paidAmount,
+    this.paymentMethod = 'bKash / Bank Transfer',
+    this.notes = '',
     this.companyName = 'JERSEYTUDE',
     this.companyTagline = 'Custom Jersey Maker',
     this.companyEmail = 'jerseytude.official@gmail.com',
@@ -61,14 +73,27 @@ class Bill {
     this.routingNumber = '060914152',
     this.swiftCode = 'BRAKBDDH',
     List<String>? terms,
-  }) : terms = terms ?? [
+  })  : terms = terms ?? [
           'If payment is made via bKash Send Money, the client must add/include the applicable cash out charge.',
           'Kindly share a transaction screenshot or payment clearance slip once the transfer is completed.',
           'Verify all player typography names, numbers, and sizing distribution charts prior to final manufacturing layout sign-off.',
           'Thank you for choosing JerseyTude for your custom sports apparel.',
-        ];
+        ],
+        paidAmount = paidAmount ?? (paymentStatus == 'Paid' ? items.fold(0.0, (s, i) => s + i.totalPrice) : 0.0);
 
-  double get grandTotal => items.fold(0.0, (sum, item) => sum + item.totalPrice);
+  double get subtotal => items.fold(0.0, (sum, item) => sum + item.totalPrice);
+
+  double get grandTotal {
+    final total = subtotal + deliveryFee - discount;
+    return total < 0 ? 0.0 : total;
+  }
+
+  double get dueAmount {
+    if (paymentStatus == 'Paid') return 0.0;
+    final due = grandTotal - paidAmount;
+    return due < 0 ? 0.0 : due;
+  }
+
   int get totalQuantity => items.fold(0, (sum, item) => sum + item.quantity);
 
   String get amountInWords => NumberToWords.convert(grandTotal);
@@ -84,6 +109,11 @@ class Bill {
       'customerPhone': customerPhone,
       'project': project,
       'items': items.map((e) => e.toMap()).toList(),
+      'deliveryFee': deliveryFee,
+      'discount': discount,
+      'paidAmount': paidAmount,
+      'paymentMethod': paymentMethod,
+      'notes': notes,
       'companyName': companyName,
       'companyTagline': companyTagline,
       'companyEmail': companyEmail,
@@ -102,6 +132,14 @@ class Bill {
   }
 
   factory Bill.fromMap(Map<String, dynamic> map) {
+    final status = map['paymentStatus'] as String? ?? 'Pending';
+    final itemsList = (map['items'] as List<dynamic>?)
+            ?.map((itemMap) => OrderItem.fromMap(Map<String, dynamic>.from(itemMap as Map)))
+            .toList() ??
+        [];
+    final calculatedSubtotal = itemsList.fold(0.0, (s, i) => s + i.totalPrice);
+    final fallbackPaid = status == 'Paid' ? calculatedSubtotal : 0.0;
+
     return Bill(
       id: map['id'] as String? ?? DateTime.now().millisecondsSinceEpoch.toString(),
       invoiceNumber: map['invoiceNumber'] as String? ?? 'JT-2026-1029',
@@ -110,15 +148,17 @@ class Bill {
           : (map['createdAt'] != null
               ? DateTime.tryParse(map['createdAt'] as String) ?? DateTime.now()
               : DateTime.now()),
-      paymentStatus: map['paymentStatus'] as String? ?? 'Pending',
+      paymentStatus: status,
       customerName: map['customerName'] as String? ?? 'Jisan',
       customerAddress: map['customerAddress'] as String? ?? 'Sunamganj',
       customerPhone: map['customerPhone'] as String? ?? '+880 1648725556',
       project: map['project'] as String? ?? 'Custom Sports Apparel',
-      items: (map['items'] as List<dynamic>?)
-              ?.map((itemMap) => OrderItem.fromMap(Map<String, dynamic>.from(itemMap as Map)))
-              .toList() ??
-          [],
+      items: itemsList,
+      deliveryFee: (map['deliveryFee'] as num?)?.toDouble() ?? 0.0,
+      discount: (map['discount'] as num?)?.toDouble() ?? 0.0,
+      paidAmount: (map['paidAmount'] as num?)?.toDouble() ?? fallbackPaid,
+      paymentMethod: map['paymentMethod'] as String? ?? 'bKash / Bank Transfer',
+      notes: map['notes'] as String? ?? '',
       companyName: map['companyName'] as String? ?? 'JERSEYTUDE',
       companyTagline: map['companyTagline'] as String? ?? 'Custom Jersey Maker',
       companyEmail: map['companyEmail'] as String? ?? 'jerseytude.official@gmail.com',

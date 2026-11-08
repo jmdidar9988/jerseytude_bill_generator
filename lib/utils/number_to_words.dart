@@ -36,3 +36,4 @@ class NumberToWords {
     return '${_convertInteger(n ~/ 1000000000)} Billion ${n % 1000000000 != 0 ? _convertInteger(n % 1000000000) : ''}';
   }
 }
+
