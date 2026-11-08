@@ -144,20 +144,38 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
           children: [
-            Text(
-              'JERSEYTUDE',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1.5,
+            Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Image.asset(
+                'assets/images/jerseytude_logo.png',
+                height: 30,
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) => const Icon(Icons.sports_soccer, color: AppTheme.accent),
               ),
             ),
-            Text(
-              'Custom Jersey Maker • Invoice & Business System',
-              style: TextStyle(fontSize: 10, color: Colors.white70),
+            const SizedBox(width: 10),
+            const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'JERSEYTUDE',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                Text(
+                  'Custom Jersey Maker • Invoice & Business System',
+                  style: TextStyle(fontSize: 10, color: Colors.white70),
+                ),
+              ],
             ),
           ],
         ),
