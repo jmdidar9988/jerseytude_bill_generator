@@ -8,6 +8,18 @@ import '../utils/number_to_words.dart';
 import '../widgets/item_dialog.dart';
 import 'invoice_preview_screen.dart';
 
+class _CustomerRecord {
+  final String name;
+  final String phone;
+  final String address;
+
+  const _CustomerRecord({
+    required this.name,
+    required this.phone,
+    required this.address,
+  });
+}
+
 class CreateBillScreen extends StatefulWidget {
   final Bill? existingBill;
   final String initialInvoiceType; // 'customer' or 'order'
@@ -35,6 +47,7 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
   late DateTime _selectedDate;
   String _selectedStatus = 'Pending';
   List<OrderItem> _items = [];
+  List<_CustomerRecord> _savedCustomers = [];
 
   final List<String> _statuses = ['Pending', 'Paid', 'Partial'];
 
@@ -55,24 +68,84 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
       _items = List.from(bill.items);
     } else {
       _invoiceNoController = TextEditingController();
-      _nameController = TextEditingController(
-          text: _invoiceType == 'order' ? 'Jersey Master Factory' : 'Jisan');
-      _addressController = TextEditingController(
-          text: _invoiceType == 'order' ? 'Dhaka, Bangladesh' : 'Sunamganj');
-      _phoneController = TextEditingController(
-          text: _invoiceType == 'order' ? '+880 1700000000' : '+880 1648725556');
+      _nameController = TextEditingController();
+      _addressController = TextEditingController();
+      _phoneController = TextEditingController();
       _projectController = TextEditingController(text: 'Custom Sports Apparel');
       _selectedDate = DateTime.now();
-      _items = [
-        OrderItem(
-          id: 'item-1',
-          description: 'Leaf Jacquard Polo Full Sleeve Jersey',
-          quantity: 28,
-          unitPrice: _invoiceType == 'order' ? 420.0 : 420.0,
-        ),
-      ];
+      _items = [];
       _generateInvoiceNumber();
     }
+
+    _loadPreviousCustomers();
+  }
+
+  Future<void> _loadPreviousCustomers() async {
+    try {
+      final bills = await FirestoreService.getAllBills();
+      final Map<String, _CustomerRecord> records = {};
+
+      for (final b in bills) {
+        final name = b.customerName.trim();
+        final phone = b.customerPhone.trim();
+        final address = b.customerAddress.trim();
+
+        if (name.isNotEmpty) {
+          final key = name.toLowerCase();
+          if (!records.containsKey(key) || (records[key]!.address.isEmpty && address.isNotEmpty)) {
+            records[key] = _CustomerRecord(name: name, phone: phone, address: address);
+          }
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _savedCustomers = records.values.toList();
+        });
+      }
+    } catch (_) {}
+  }
+
+  void _onNameChanged(String val) {
+    final query = val.trim().toLowerCase();
+    if (query.isEmpty) return;
+
+    for (final c in _savedCustomers) {
+      if (c.name.toLowerCase() == query) {
+        if (_phoneController.text.trim().isEmpty && c.phone.isNotEmpty) {
+          _phoneController.text = c.phone;
+        }
+        if (_addressController.text.trim().isEmpty && c.address.isNotEmpty) {
+          _addressController.text = c.address;
+        }
+        break;
+      }
+    }
+  }
+
+  void _onPhoneChanged(String val) {
+    final cleaned = val.replaceAll(RegExp(r'[\s\-+]'), '');
+    if (cleaned.length < 5) return;
+
+    for (final c in _savedCustomers) {
+      final cCleaned = c.phone.replaceAll(RegExp(r'[\s\-+]'), '');
+      if (cCleaned.isNotEmpty && (cCleaned.endsWith(cleaned) || cleaned.endsWith(cCleaned))) {
+        if (_nameController.text.trim().isEmpty && c.name.isNotEmpty) {
+          _nameController.text = c.name;
+        }
+        if (_addressController.text.trim().isEmpty && c.address.isNotEmpty) {
+          _addressController.text = c.address;
+        }
+        break;
+      }
+    }
+  }
+
+  void _applyCustomerRecord(_CustomerRecord record) {
+    setState(() {
+      _nameController.text = record.name;
+      if (record.phone.isNotEmpty) _phoneController.text = record.phone;
+      if (record.address.isNotEmpty) _addressController.text = record.address;
+    });
   }
 
   Future<void> _generateInvoiceNumber() async {
@@ -416,15 +489,79 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            isCustomer ? 'BILLED TO (CUSTOMER):' : 'ORDER TO (SUPPLIER / FACTORY):',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: isCustomer ? AppTheme.primary : Colors.purple,
-                            ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                isCustomer ? 'BILLED TO (CUSTOMER):' : 'ORDER TO (SUPPLIER / FACTORY):',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: isCustomer ? AppTheme.primary : Colors.purple,
+                                ),
+                              ),
+                              if (isCustomer && _savedCustomers.isNotEmpty)
+                                PopupMenuButton<_CustomerRecord>(
+                                  tooltip: 'Auto-fill Previous Customer',
+                                  onSelected: _applyCustomerRecord,
+                                  child: const Padding(
+                                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.contacts, size: 14, color: AppTheme.accent),
+                                        SizedBox(width: 4),
+                                        Text('Saved Customers', style: TextStyle(fontSize: 11, color: AppTheme.accent, fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
+                                  ),
+                                  itemBuilder: (ctx) => _savedCustomers.map((rec) {
+                                    return PopupMenuItem<_CustomerRecord>(
+                                      value: rec,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(rec.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                          Text(
+                                            '${rec.address.isNotEmpty ? rec.address : "No address"} • ${rec.phone}',
+                                            style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                            ],
                           ),
-                          const Divider(height: 20),
+                          const Divider(height: 16),
+
+                          // Quick Chips for Recent Customers
+                          if (isCustomer && _savedCustomers.isNotEmpty) ...[
+                            Row(
+                              children: [
+                                const Text('Recent: ', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary, fontWeight: FontWeight.bold)),
+                                Expanded(
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: Row(
+                                      children: _savedCustomers.take(4).map((c) {
+                                        return Padding(
+                                          padding: const EdgeInsets.only(right: 6),
+                                          child: ActionChip(
+                                            visualDensity: VisualDensity.compact,
+                                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                            label: Text('${c.name} (${c.address})', style: const TextStyle(fontSize: 10.5)),
+                                            onPressed: () => _applyCustomerRecord(c),
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                          ],
+
                           Row(
                             children: [
                               Expanded(
@@ -433,9 +570,11 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                                   controller: _nameController,
                                   decoration: InputDecoration(
                                     labelText: isCustomer ? 'Customer Name *' : 'Supplier / Factory Name *',
-                                    hintText: isCustomer ? 'Jisan' : 'Jersey Master Factory',
+                                    hintText: isCustomer ? 'Enter customer name' : 'Jersey Master Factory',
                                     prefixIcon: Icon(isCustomer ? Icons.person_outline : Icons.factory_outlined, size: 18),
+                                    helperText: isCustomer ? 'Type name to auto-fill address/phone' : null,
                                   ),
+                                  onChanged: _onNameChanged,
                                   validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
                                 ),
                               ),
@@ -444,11 +583,13 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                                 flex: 2,
                                 child: TextFormField(
                                   controller: _phoneController,
-                                  decoration: const InputDecoration(
+                                  decoration: InputDecoration(
                                     labelText: 'Contact Phone',
-                                    hintText: '+880 1648725556',
-                                    prefixIcon: Icon(Icons.phone_outlined, size: 18),
+                                    hintText: isCustomer ? '017XXXXXXXX' : '+880 1700000000',
+                                    prefixIcon: const Icon(Icons.phone_outlined, size: 18),
+                                    helperText: isCustomer ? 'Type phone to auto-fill' : null,
                                   ),
+                                  onChanged: _onPhoneChanged,
                                 ),
                               ),
                             ],
@@ -462,7 +603,7 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                                   controller: _addressController,
                                   decoration: InputDecoration(
                                     labelText: isCustomer ? 'Customer Address' : 'Factory / Delivery Address',
-                                    hintText: isCustomer ? 'Sunamganj' : 'Dhaka, Bangladesh',
+                                    hintText: isCustomer ? 'e.g. Sunamganj, Sylhet' : 'Dhaka, Bangladesh',
                                     prefixIcon: const Icon(Icons.location_on_outlined, size: 18),
                                   ),
                                 ),
