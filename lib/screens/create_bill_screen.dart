@@ -10,8 +10,13 @@ import 'invoice_preview_screen.dart';
 
 class CreateBillScreen extends StatefulWidget {
   final Bill? existingBill;
+  final String initialInvoiceType; // 'customer' or 'order'
 
-  const CreateBillScreen({super.key, this.existingBill});
+  const CreateBillScreen({
+    super.key,
+    this.existingBill,
+    this.initialInvoiceType = 'customer',
+  });
 
   @override
   State<CreateBillScreen> createState() => _CreateBillScreenState();
@@ -20,6 +25,7 @@ class CreateBillScreen extends StatefulWidget {
 class _CreateBillScreenState extends State<CreateBillScreen> {
   final _formKey = GlobalKey<FormState>();
 
+  late String _invoiceType; // 'customer' or 'order'
   late TextEditingController _invoiceNoController;
   late TextEditingController _nameController;
   late TextEditingController _addressController;
@@ -36,6 +42,8 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
   void initState() {
     super.initState();
     final bill = widget.existingBill;
+    _invoiceType = bill?.invoiceType ?? widget.initialInvoiceType;
+
     if (bill != null) {
       _invoiceNoController = TextEditingController(text: bill.invoiceNumber);
       _nameController = TextEditingController(text: bill.customerName);
@@ -47,9 +55,12 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
       _items = List.from(bill.items);
     } else {
       _invoiceNoController = TextEditingController();
-      _nameController = TextEditingController(text: 'Jisan');
-      _addressController = TextEditingController(text: 'Sunamganj');
-      _phoneController = TextEditingController(text: '+880 1648725556');
+      _nameController = TextEditingController(
+          text: _invoiceType == 'order' ? 'Jersey Master Factory' : 'Jisan');
+      _addressController = TextEditingController(
+          text: _invoiceType == 'order' ? 'Dhaka, Bangladesh' : 'Sunamganj');
+      _phoneController = TextEditingController(
+          text: _invoiceType == 'order' ? '+880 1700000000' : '+880 1648725556');
       _projectController = TextEditingController(text: 'Custom Sports Apparel');
       _selectedDate = DateTime.now();
       _items = [
@@ -57,7 +68,7 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
           id: 'item-1',
           description: 'Leaf Jacquard Polo Full Sleeve Jersey',
           quantity: 28,
-          unitPrice: 420.0,
+          unitPrice: _invoiceType == 'order' ? 420.0 : 420.0,
         ),
       ];
       _generateInvoiceNumber();
@@ -68,7 +79,11 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
     final nextNo = await FirestoreService.getNextInvoiceNumber();
     if (mounted) {
       setState(() {
-        _invoiceNoController.text = nextNo;
+        if (_invoiceType == 'order') {
+          _invoiceNoController.text = nextNo.replaceFirst('JT-', 'JT-ORD-');
+        } else {
+          _invoiceNoController.text = nextNo;
+        }
       });
     }
   }
@@ -89,7 +104,7 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
   void _addItem() async {
     final result = await showDialog<OrderItem>(
       context: context,
-      builder: (_) => const ItemDialog(),
+      builder: (_) => ItemDialog(invoiceType: _invoiceType),
     );
     if (result != null) {
       setState(() => _items.add(result));
@@ -99,7 +114,10 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
   void _editItem(int index) async {
     final result = await showDialog<OrderItem>(
       context: context,
-      builder: (_) => ItemDialog(existingItem: _items[index]),
+      builder: (_) => ItemDialog(
+        existingItem: _items[index],
+        invoiceType: _invoiceType,
+      ),
     );
     if (result != null) {
       setState(() => _items[index] = result);
@@ -116,6 +134,7 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
       invoiceNumber: _invoiceNoController.text.trim().isEmpty ? 'JT-2026-1029' : _invoiceNoController.text.trim(),
       date: _selectedDate,
       paymentStatus: _selectedStatus,
+      invoiceType: _invoiceType,
       customerName: _nameController.text.trim(),
       customerAddress: _addressController.text.trim(),
       customerPhone: _phoneController.text.trim(),
@@ -148,8 +167,10 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invoice saved successfully!'),
+        SnackBar(
+          content: Text(_invoiceType == 'order'
+              ? 'Order Invoice ${_invoiceNoController.text} saved successfully!'
+              : 'Customer Invoice ${_invoiceNoController.text} saved successfully!'),
           backgroundColor: AppTheme.success,
         ),
       );
@@ -157,14 +178,112 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
     }
   }
 
+  Widget _buildInvoiceTypeCornerSelector() {
+    final isCustomer = _invoiceType == 'customer';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: () {
+                setState(() {
+                  _invoiceType = 'customer';
+                  if (_invoiceNoController.text.startsWith('JT-ORD-')) {
+                    _invoiceNoController.text = _invoiceNoController.text.replaceFirst('JT-ORD-', 'JT-');
+                  }
+                });
+              },
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: isCustomer ? AppTheme.accent : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: isCustomer
+                      ? [BoxShadow(color: AppTheme.accent.withValues(alpha: 0.3), blurRadius: 4, offset: const Offset(0, 2))]
+                      : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.receipt_long, size: 18, color: isCustomer ? Colors.white : AppTheme.textSecondary),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Customer Invoice (বিক্রয়)',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: isCustomer ? Colors.white : AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: InkWell(
+              onTap: () {
+                setState(() {
+                  _invoiceType = 'order';
+                  if (_invoiceNoController.text.startsWith('JT-') && !_invoiceNoController.text.startsWith('JT-ORD-')) {
+                    _invoiceNoController.text = _invoiceNoController.text.replaceFirst('JT-', 'JT-ORD-');
+                  }
+                });
+              },
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: !isCustomer ? Colors.purple : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: !isCustomer
+                      ? [BoxShadow(color: Colors.purple.withValues(alpha: 0.3), blurRadius: 4, offset: const Offset(0, 2))]
+                      : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.inventory_2_outlined, size: 18, color: !isCustomer ? Colors.white : AppTheme.textSecondary),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Order Invoice (ক্রয় / সাপ্লায়ার)',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: !isCustomer ? Colors.white : AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currency = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
     final dateFormat = DateFormat('MMMM dd, yyyy');
+    final isCustomer = _invoiceType == 'customer';
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.existingBill == null ? 'Create Invoice' : 'Edit Invoice'),
+        title: Text(widget.existingBill == null
+            ? (isCustomer ? 'Create Customer Invoice' : 'Create Order Invoice')
+            : 'Edit ${isCustomer ? "Customer" : "Order"} Invoice'),
         actions: [
           IconButton(
             icon: const Icon(Icons.picture_as_pdf),
@@ -183,6 +302,33 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // Invoice Type Selector (Corner / Top Option)
+                  _buildInvoiceTypeCornerSelector(),
+
+                  // Mode Notice Banner
+                  if (!isCustomer)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 14),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.purple.shade200),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.purple, size: 20),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'ORDER INVOICE MODE: Used when placing orders with manufacturers/suppliers. Fabric prices are fixed from the Admin Panel, and receiving payment channels are excluded.',
+                              style: TextStyle(fontSize: 12, color: Colors.purple, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
                   // Invoice Meta Card
                   Card(
                     child: Padding(
@@ -190,7 +336,14 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('INVOICE INFO', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                          Text(
+                            isCustomer ? 'INVOICE METADATA' : 'ORDER INVOICE METADATA',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: isCustomer ? AppTheme.primary : Colors.purple,
+                            ),
+                          ),
                           const Divider(height: 20),
                           Row(
                             children: [
@@ -198,10 +351,10 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                                 flex: 3,
                                 child: TextFormField(
                                   controller: _invoiceNoController,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Invoice No',
-                                    hintText: 'JT-2026-1029',
-                                    prefixIcon: Icon(Icons.tag, size: 18),
+                                  decoration: InputDecoration(
+                                    labelText: isCustomer ? 'Invoice No' : 'Order Invoice No',
+                                    hintText: isCustomer ? 'JT-2026-1029' : 'JT-ORD-2026-1029',
+                                    prefixIcon: const Icon(Icons.tag, size: 18),
                                   ),
                                   validator: (v) => v == null || v.isEmpty ? 'Required' : null,
                                 ),
@@ -256,14 +409,21 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
 
                   const SizedBox(height: 14),
 
-                  // Bill To Card
+                  // Billed To / Supplier Card
                   Card(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('BILL TO:', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                          Text(
+                            isCustomer ? 'BILLED TO (CUSTOMER):' : 'ORDER TO (SUPPLIER / FACTORY):',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: isCustomer ? AppTheme.primary : Colors.purple,
+                            ),
+                          ),
                           const Divider(height: 20),
                           Row(
                             children: [
@@ -271,10 +431,10 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                                 flex: 3,
                                 child: TextFormField(
                                   controller: _nameController,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Name *',
-                                    hintText: 'Jisan',
-                                    prefixIcon: Icon(Icons.person_outline, size: 18),
+                                  decoration: InputDecoration(
+                                    labelText: isCustomer ? 'Customer Name *' : 'Supplier / Factory Name *',
+                                    hintText: isCustomer ? 'Jisan' : 'Jersey Master Factory',
+                                    prefixIcon: Icon(isCustomer ? Icons.person_outline : Icons.factory_outlined, size: 18),
                                   ),
                                   validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
                                 ),
@@ -285,7 +445,7 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                                 child: TextFormField(
                                   controller: _phoneController,
                                   decoration: const InputDecoration(
-                                    labelText: 'Phone',
+                                    labelText: 'Contact Phone',
                                     hintText: '+880 1648725556',
                                     prefixIcon: Icon(Icons.phone_outlined, size: 18),
                                   ),
@@ -300,10 +460,10 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                                 flex: 3,
                                 child: TextFormField(
                                   controller: _addressController,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Address',
-                                    hintText: 'Sunamganj',
-                                    prefixIcon: Icon(Icons.location_on_outlined, size: 18),
+                                  decoration: InputDecoration(
+                                    labelText: isCustomer ? 'Customer Address' : 'Factory / Delivery Address',
+                                    hintText: isCustomer ? 'Sunamganj' : 'Dhaka, Bangladesh',
+                                    prefixIcon: const Icon(Icons.location_on_outlined, size: 18),
                                   ),
                                 ),
                               ),
@@ -313,7 +473,7 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                                 child: TextFormField(
                                   controller: _projectController,
                                   decoration: const InputDecoration(
-                                    labelText: 'Project',
+                                    labelText: 'Project Reference',
                                     hintText: 'Custom Sports Apparel',
                                     prefixIcon: Icon(Icons.folder_outlined, size: 18),
                                   ),
@@ -339,12 +499,13 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                'Order Details (${_items.length} items, $_totalQuantity pcs)',
+                                'Jersey Items (${_items.length} items, $_totalQuantity pcs)',
                                 style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                               ),
                               ElevatedButton.icon(
+                                style: isCustomer ? null : ElevatedButton.styleFrom(backgroundColor: Colors.purple),
                                 icon: const Icon(Icons.add, size: 16),
-                                label: const Text('Add Item'),
+                                label: const Text('Add Jersey'),
                                 onPressed: _addItem,
                               ),
                             ],
@@ -352,10 +513,16 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                           const Divider(height: 20),
 
                           if (_items.isEmpty)
-                            const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 24),
+                            Padding(
+                              padding: const EdgeInsets.all(24.0),
                               child: Center(
-                                child: Text('No items added yet. Click "Add Item" above.'),
+                                child: Column(
+                                  children: [
+                                    Icon(Icons.inventory_2_outlined, size: 40, color: Colors.grey.shade400),
+                                    const SizedBox(height: 8),
+                                    const Text('No jerseys added yet. Click "Add Jersey" to add.', style: TextStyle(color: AppTheme.textSecondary)),
+                                  ],
+                                ),
                               ),
                             )
                           else
@@ -367,15 +534,33 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                               itemBuilder: (context, index) {
                                 final item = _items[index];
                                 return ListTile(
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                  title: Text(item.description, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                                  subtitle: Text('Qty: ${item.quantity}   |   Unit Price: ${currency.format(item.unitPrice)}'),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                                  leading: CircleAvatar(
+                                    backgroundColor: isCustomer ? AppTheme.accentLight : Colors.purple.shade50,
+                                    child: Text(
+                                      '${index + 1}',
+                                      style: TextStyle(
+                                        color: isCustomer ? AppTheme.accent : Colors.purple,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                  title: Text(item.description, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5)),
+                                  subtitle: Text(
+                                    '${item.quantity} pcs × ${currency.format(item.unitPrice)} ${isCustomer ? "(Selling)" : "(Fixed Order Price)"}',
+                                    style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                                  ),
                                   trailing: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Text(
                                         currency.format(item.totalPrice),
-                                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                          color: isCustomer ? AppTheme.primary : Colors.purple,
+                                        ),
                                       ),
                                       const SizedBox(width: 8),
                                       IconButton(
@@ -392,68 +577,37 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                               },
                             ),
 
-                          const SizedBox(height: 16),
-                          const Divider(),
+                          const SizedBox(height: 12),
+                          const Divider(height: 1),
+                          const SizedBox(height: 12),
 
-                          // Grand Total Summary Box
+                          // Total Bar
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
-                              color: Colors.grey.shade50,
+                              color: isCustomer ? AppTheme.accentLight : Colors.purple.shade50,
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: AppTheme.border),
                             ),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text(
-                                  'Grand Total Summary',
-                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Total Pieces: $_totalQuantity pcs', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      NumberToWords.convert(_grandTotal),
+                                      style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+                                    ),
+                                  ],
                                 ),
                                 Text(
                                   currency.format(_grandTotal),
-                                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppTheme.primary),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          // Amount in words
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppTheme.accentLight.withValues(alpha: 0.5),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Icon(Icons.spellcheck, size: 18, color: AppTheme.accent),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: RichText(
-                                    text: TextSpan(
-                                      children: [
-                                        const TextSpan(
-                                          text: 'Total Payable Amount in Words:\n',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w700,
-                                            color: AppTheme.accent,
-                                          ),
-                                        ),
-                                        TextSpan(
-                                          text: NumberToWords.convert(_grandTotal),
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w600,
-                                            color: AppTheme.textPrimary,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: isCustomer ? AppTheme.primary : Colors.purple,
                                   ),
                                 ),
                               ],
@@ -464,36 +618,9 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 14),
-
-                  // Company, Payment & Terms info summary
-                  Card(
-                    child: ExpansionTile(
-                      leading: const Icon(Icons.info_outline, color: AppTheme.accent),
-                      title: const Text(
-                        'Jerseytude Payment Methods & Terms (Included in Invoice)',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
-                      childrenPadding: const EdgeInsets.all(16),
-                      children: const [
-                        Text(
-                          'Payment Methods Included:\n'
-                          '1. bKash (Personal) - 01319923519 (Send Money)\n'
-                          '2. Bank Transfer - BRAC Bank PLC (JIBRAN MASUM DIDAR, A/C: 1078825920001, Routing: 060914152)\n\n'
-                          'Terms & Conditions:\n'
-                          '1. If payment is made via bKash Send Money, the client must add/include the applicable cash out charge.\n'
-                          '2. Kindly share a transaction screenshot or payment clearance slip once the transfer is completed.\n'
-                          '3. Verify all player typography names, numbers, and sizing distribution charts prior to final manufacturing layout sign-off.\n'
-                          '4. Thank you for choosing JerseyTude for your custom sports apparel.',
-                          style: TextStyle(fontSize: 11, height: 1.5, color: AppTheme.textSecondary),
-                        ),
-                      ],
-                    ),
-                  ),
-
                   const SizedBox(height: 24),
 
-                  // Buttons
+                  // Bottom Action Buttons
                   Row(
                     children: [
                       Expanded(
@@ -506,15 +633,18 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: ElevatedButton.icon(
+                          style: isCustomer ? null : ElevatedButton.styleFrom(backgroundColor: Colors.purple),
                           icon: const Icon(Icons.save, size: 18),
-                          label: const Text('Save Invoice'),
+                          label: Text(widget.existingBill == null
+                              ? (isCustomer ? 'Save Customer Invoice' : 'Save Order Invoice')
+                              : 'Update Invoice'),
                           onPressed: () => _saveBill(preview: false),
                         ),
                       ),
                     ],
                   ),
 
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 40),
                 ],
               ),
             ),

@@ -1,0 +1,556 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../models/fabric_item.dart';
+import '../services/fabric_service.dart';
+import '../theme/app_theme.dart';
+
+class AdminPanelScreen extends StatefulWidget {
+  const AdminPanelScreen({super.key});
+
+  static Future<void> showAdminAuthDialogAndNavigate(BuildContext context) async {
+    final pinController = TextEditingController();
+    bool isObscured = true;
+    String? errorText;
+
+    final authenticated = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.admin_panel_settings, color: AppTheme.primary, size: 26),
+              SizedBox(width: 10),
+              Text('Admin Authentication', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Enter Admin PIN/Password to access fabric inventory and pricing controls.',
+                style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: pinController,
+                obscureText: isObscured,
+                autofocus: true,
+                keyboardType: TextInputType.visiblePassword,
+                decoration: InputDecoration(
+                  labelText: 'Admin Password / PIN',
+                  hintText: 'Default PIN is 1234',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  errorText: errorText,
+                  suffixIcon: IconButton(
+                    icon: Icon(isObscured ? Icons.visibility : Icons.visibility_off),
+                    onPressed: () => setState(() => isObscured = !isObscured),
+                  ),
+                ),
+                onSubmitted: (_) async {
+                  final valid = await FabricService.verifyAdminPassword(pinController.text);
+                  if (!ctx.mounted) return;
+                  if (valid) {
+                    Navigator.of(ctx).pop(true);
+                  } else {
+                    setState(() => errorText = 'Incorrect Password. Try default: 1234');
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final valid = await FabricService.verifyAdminPassword(pinController.text);
+                if (!ctx.mounted) return;
+                if (valid) {
+                  Navigator.of(ctx).pop(true);
+                } else {
+                  setState(() => errorText = 'Incorrect Password. Try default: 1234');
+                }
+              },
+              child: const Text('Unlock Panel'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (authenticated == true && context.mounted) {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const AdminPanelScreen()),
+      );
+    }
+  }
+
+  @override
+  State<AdminPanelScreen> createState() => _AdminPanelScreenState();
+}
+
+class _AdminPanelScreenState extends State<AdminPanelScreen> {
+  List<FabricItem> _fabrics = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFabrics();
+  }
+
+  Future<void> _loadFabrics() async {
+    setState(() => _isLoading = true);
+    final list = await FabricService.getAllFabrics();
+    setState(() {
+      _fabrics = list;
+      _isLoading = false;
+    });
+  }
+
+  void _openFabricDialog([FabricItem? existing]) {
+    final nameController = TextEditingController(text: existing?.name ?? '');
+    final halfOrderController = TextEditingController(
+        text: existing != null ? existing.halfSleeveOrderPrice.toStringAsFixed(0) : '360');
+    final fullOrderController = TextEditingController(
+        text: existing != null ? existing.fullSleeveOrderPrice.toStringAsFixed(0) : '400');
+    final halfCustController = TextEditingController(
+        text: existing != null && existing.defaultCustomerHalfPrice > 0
+            ? existing.defaultCustomerHalfPrice.toStringAsFixed(0)
+            : '450');
+    final fullCustController = TextEditingController(
+        text: existing != null && existing.defaultCustomerFullPrice > 0
+            ? existing.defaultCustomerFullPrice.toStringAsFixed(0)
+            : '500');
+
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(existing == null ? 'Add Jersey Fabric' : 'Edit Fabric & Pricing'),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 450),
+          child: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Fabric / Jersey Name *', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 6),
+                  TextFormField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      hintText: 'e.g. Leaf Jacquard, China Mesh, Interlock',
+                      prefixIcon: Icon(Icons.checkroom),
+                    ),
+                    validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Fixed Order Prices
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.purple.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.inventory_2_outlined, size: 16, color: Colors.purple),
+                            SizedBox(width: 6),
+                            Text(
+                              'Fixed Order Prices (Supplier Purchase)',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.purple),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: halfOrderController,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                decoration: const InputDecoration(
+                                  labelText: 'Half Sleeve (BDT)',
+                                  prefixText: 'BDT ',
+                                ),
+                                validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextFormField(
+                                controller: fullOrderController,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                decoration: const InputDecoration(
+                                  labelText: 'Full Sleeve (BDT)',
+                                  prefixText: 'BDT ',
+                                ),
+                                validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  // Default Customer Suggested Prices
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.sell_outlined, size: 16, color: AppTheme.accent),
+                            SizedBox(width: 6),
+                            Text(
+                              'Suggested Customer Selling Prices',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.accent),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: halfCustController,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                decoration: const InputDecoration(
+                                  labelText: 'Half Sleeve (BDT)',
+                                  prefixText: 'BDT ',
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextFormField(
+                                controller: fullCustController,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                decoration: const InputDecoration(
+                                  labelText: 'Full Sleeve (BDT)',
+                                  prefixText: 'BDT ',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (formKey.currentState?.validate() != true) return;
+              final fabric = FabricItem(
+                id: existing?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+                name: nameController.text.trim(),
+                halfSleeveOrderPrice: double.tryParse(halfOrderController.text) ?? 360.0,
+                fullSleeveOrderPrice: double.tryParse(fullOrderController.text) ?? 400.0,
+                defaultCustomerHalfPrice: double.tryParse(halfCustController.text) ?? 0.0,
+                defaultCustomerFullPrice: double.tryParse(fullCustController.text) ?? 0.0,
+              );
+              await FabricService.saveFabric(fabric);
+              if (!ctx.mounted) return;
+              Navigator.of(ctx).pop();
+              _loadFabrics();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Fabric "${fabric.name}" saved!')),
+                );
+              }
+            },
+            child: const Text('Save Fabric'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteFabric(FabricItem fabric) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Fabric'),
+        content: Text('Are you sure you want to delete "${fabric.name}"?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await FabricService.deleteFabric(fabric.id);
+      _loadFabrics();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Deleted "${fabric.name}"')),
+        );
+      }
+    }
+  }
+
+  void _changeAdminPassword() {
+    final newPinController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Change Admin Password'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter new password or PIN for Admin Panel access:', style: TextStyle(fontSize: 13)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: newPinController,
+              decoration: const InputDecoration(
+                labelText: 'New Password',
+                prefixIcon: Icon(Icons.lock_reset),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              if (newPinController.text.trim().isNotEmpty) {
+                await FabricService.setAdminPassword(newPinController.text.trim());
+                if (!ctx.mounted) return;
+                Navigator.of(ctx).pop();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Admin password updated successfully!')),
+                  );
+                }
+              }
+            },
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Row(
+          children: [
+            Icon(Icons.admin_panel_settings, size: 22),
+            SizedBox(width: 8),
+            Text('Admin Panel - Fabric & Pricing'),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.password),
+            tooltip: 'Change Admin PIN',
+            onPressed: _changeAdminPassword,
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+            onPressed: _loadFabrics,
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        icon: const Icon(Icons.add),
+        label: const Text('Add Fabric'),
+        onPressed: () => _openFabricDialog(),
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _fabrics.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.checkroom_outlined, size: 56, color: Colors.grey),
+                      const SizedBox(height: 12),
+                      const Text('No fabrics registered yet', style: TextStyle(fontSize: 16)),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: () => _openFabricDialog(),
+                        child: const Text('Add First Fabric'),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _fabrics.length,
+                  itemBuilder: (context, index) {
+                    final item = _fabrics[index];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.purple.shade50,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Icon(Icons.checkroom, color: Colors.purple, size: 22),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      item.name,
+                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.edit_outlined, size: 20),
+                                      tooltip: 'Edit Fabric',
+                                      onPressed: () => _openFabricDialog(item),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.danger),
+                                      tooltip: 'Delete Fabric',
+                                      onPressed: () => _deleteFabric(item),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            const Divider(height: 1),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                // Order Invoice Fixed Price
+                                Expanded(
+                                  child: Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.purple.shade50.withValues(alpha: 0.6),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.purple.shade100),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'ORDER INVOICE (FIXED)',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.purple,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Half: BDT ${item.halfSleeveOrderPrice.toStringAsFixed(0)}',
+                                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                                        ),
+                                        Text(
+                                          'Full: BDT ${item.fullSleeveOrderPrice.toStringAsFixed(0)}',
+                                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                // Customer Invoice Default Price
+                                Expanded(
+                                  child: Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.shade50.withValues(alpha: 0.6),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.blue.shade100),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'CUSTOMER (SUGGESTED)',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppTheme.accent,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Half: BDT ${item.defaultCustomerHalfPrice.toStringAsFixed(0)}',
+                                          style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+                                        ),
+                                        Text(
+                                          'Full: BDT ${item.defaultCustomerFullPrice.toStringAsFixed(0)}',
+                                          style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+    );
+  }
+}

@@ -6,6 +6,7 @@ class Bill {
   String invoiceNumber;
   DateTime date;
   String paymentStatus; // Pending, Paid, Partial
+  String invoiceType; // 'customer' or 'order'
 
   // Bill To
   String customerName;
@@ -49,6 +50,7 @@ class Bill {
     required this.invoiceNumber,
     required this.date,
     this.paymentStatus = 'Pending',
+    this.invoiceType = 'customer',
     required this.customerName,
     this.customerAddress = 'Sunamganj',
     this.customerPhone = '+880 1648725556',
@@ -98,12 +100,16 @@ class Bill {
 
   String get amountInWords => NumberToWords.convert(grandTotal);
 
+  bool get isOrderInvoice => invoiceType.toLowerCase() == 'order';
+  bool get isCustomerInvoice => !isOrderInvoice;
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'invoiceNumber': invoiceNumber,
       'date': date.toIso8601String(),
       'paymentStatus': paymentStatus,
+      'invoiceType': invoiceType,
       'customerName': customerName,
       'customerAddress': customerAddress,
       'customerPhone': customerPhone,
@@ -149,6 +155,7 @@ class Bill {
               ? DateTime.tryParse(map['createdAt'] as String) ?? DateTime.now()
               : DateTime.now()),
       paymentStatus: status,
+      invoiceType: map['invoiceType'] as String? ?? 'customer',
       customerName: map['customerName'] as String? ?? 'Jisan',
       customerAddress: map['customerAddress'] as String? ?? 'Sunamganj',
       customerPhone: map['customerPhone'] as String? ?? '+880 1648725556',

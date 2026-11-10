@@ -6,6 +6,7 @@ import '../services/pdf_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/bill_card.dart';
 import '../widgets/stat_card.dart';
+import 'admin_panel_screen.dart';
 import 'analytics_screen.dart';
 import 'create_bill_screen.dart';
 import 'invoice_preview_screen.dart';
@@ -23,6 +24,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = true;
   String _searchQuery = '';
   String _selectedFilter = 'All'; // All, Pending, Paid, Partial
+  String _selectedTypeFilter = 'All'; // All, Customer, Order
 
   final TextEditingController _searchController = TextEditingController();
 
@@ -66,12 +68,19 @@ class _HomeScreenState extends State<HomeScreen> {
         matchesStatus = b.paymentStatus.toLowerCase() == 'partial';
       }
 
-      return matchesQuery && matchesStatus;
+      bool matchesType = true;
+      if (_selectedTypeFilter == 'Customer') {
+        matchesType = b.isCustomerInvoice;
+      } else if (_selectedTypeFilter == 'Order') {
+        matchesType = b.isOrderInvoice;
+      }
+
+      return matchesQuery && matchesStatus && matchesType;
     }).toList();
   }
 
   double get _totalRevenue =>
-      _allBills.fold(0.0, (sum, b) => sum + b.grandTotal);
+      _allBills.where((b) => b.isCustomerInvoice).fold(0.0, (sum, b) => sum + b.grandTotal);
 
   int get _totalPendingCount =>
       _allBills.where((b) => b.paymentStatus.toLowerCase() == 'pending').length;
@@ -87,9 +96,18 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _openCreateBill([Bill? existing]) async {
+  void _openAdminPanel() {
+    AdminPanelScreen.showAdminAuthDialogAndNavigate(context);
+  }
+
+  void _openCreateBill({Bill? existing, String initialType = 'customer'}) async {
     final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => CreateBillScreen(existingBill: existing)),
+      MaterialPageRoute(
+        builder: (_) => CreateBillScreen(
+          existingBill: existing,
+          initialInvoiceType: initialType,
+        ),
+      ),
     );
     if (result == true) {
       _loadBills();
@@ -181,6 +199,11 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.admin_panel_settings),
+            tooltip: 'Admin Panel (Fabrics & Pricing)',
+            onPressed: _openAdminPanel,
+          ),
+          IconButton(
             icon: const Icon(Icons.analytics_outlined),
             tooltip: 'Monthly Analysis',
             onPressed: _openAnalytics,
@@ -197,12 +220,28 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openCreateBill(),
-        backgroundColor: AppTheme.accent,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
-        label: const Text('New Invoice', style: TextStyle(fontWeight: FontWeight.w700)),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FloatingActionButton.extended(
+            heroTag: 'fab_order',
+            onPressed: () => _openCreateBill(initialType: 'order'),
+            backgroundColor: Colors.purple,
+            foregroundColor: Colors.white,
+            icon: const Icon(Icons.inventory_2_outlined, size: 18),
+            label: const Text('New Order Invoice', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(height: 8),
+          FloatingActionButton.extended(
+            heroTag: 'fab_customer',
+            onPressed: () => _openCreateBill(initialType: 'customer'),
+            backgroundColor: AppTheme.accent,
+            foregroundColor: Colors.white,
+            icon: const Icon(Icons.receipt_long, size: 18),
+            label: const Text('New Customer Invoice', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -349,9 +388,48 @@ class _HomeScreenState extends State<HomeScreen> {
                                   },
                                 ),
                                 const SizedBox(height: 10),
+                                // Type Filter
                                 Row(
                                   children: [
-                                    const Text('Filter: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+                                    const Text('Type: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+                                    const SizedBox(width: 6),
+                                    Wrap(
+                                      spacing: 6,
+                                      children: [
+                                        {'label': 'All Types', 'value': 'All'},
+                                        {'label': 'Customer', 'value': 'Customer'},
+                                        {'label': 'Order', 'value': 'Order'},
+                                      ].map((item) {
+                                        final val = item['value']!;
+                                        final isSelected = _selectedTypeFilter == val;
+                                        final isOrder = val == 'Order';
+                                        return FilterChip(
+                                          label: Text(item['label']!, style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                            color: isSelected ? Colors.white : AppTheme.textPrimary,
+                                          )),
+                                          selected: isSelected,
+                                          selectedColor: isOrder ? Colors.purple : AppTheme.accent,
+                                          backgroundColor: Colors.grey.shade100,
+                                          showCheckmark: false,
+                                          onSelected: (selected) {
+                                            if (selected) {
+                                              setState(() {
+                                                _selectedTypeFilter = val;
+                                                _applyFilter();
+                                              });
+                                            }
+                                          },
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    const Text('Status: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
                                     const SizedBox(width: 6),
                                     Wrap(
                                       spacing: 8,
@@ -399,10 +477,21 @@ class _HomeScreenState extends State<HomeScreen> {
                                 color: AppTheme.primary,
                               ),
                             ),
-                            TextButton.icon(
-                              icon: const Icon(Icons.add, size: 16),
-                              label: const Text('New Invoice'),
-                              onPressed: () => _openCreateBill(),
+                            Row(
+                              children: [
+                                TextButton.icon(
+                                  style: TextButton.styleFrom(foregroundColor: Colors.purple),
+                                  icon: const Icon(Icons.inventory_2_outlined, size: 15),
+                                  label: const Text('+ Order Inv'),
+                                  onPressed: () => _openCreateBill(initialType: 'order'),
+                                ),
+                                const SizedBox(width: 4),
+                                TextButton.icon(
+                                  icon: const Icon(Icons.add, size: 15),
+                                  label: const Text('+ Customer Inv'),
+                                  onPressed: () => _openCreateBill(initialType: 'customer'),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -453,7 +542,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   );
                                 },
                                 onPrint: () => PdfInvoiceService.printInvoice(bill),
-                                onEdit: () => _openCreateBill(bill),
+                                onEdit: () => _openCreateBill(existing: bill),
                                 onDelete: () => _deleteBill(bill),
                               );
                             },

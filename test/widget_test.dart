@@ -33,4 +33,29 @@ void main() {
     expect(pdfBytes, isNotNull);
     expect(pdfBytes.isNotEmpty, isTrue);
   });
+
+  test('Order Invoice PDF generation test (supplier purchase without payment info)', () async {
+    final orderBill = Bill(
+      id: 'test-order-1',
+      invoiceNumber: 'JT-ORD-2026-1030',
+      date: DateTime(2026, 11, 1),
+      invoiceType: 'order',
+      customerName: 'Jersey Master Factory',
+      customerAddress: 'Dhaka, Bangladesh',
+      customerPhone: '+880 1700000000',
+      project: 'Summer Tournament Jerseys',
+      items: [
+        OrderItem(
+          id: '1',
+          description: 'Leaf Jacquard Polo Half Sleeve Jersey',
+          quantity: 50,
+          unitPrice: 380.0,
+        ),
+      ],
+    );
+
+    final pdfBytes = await PdfInvoiceService.generateInvoicePdf(orderBill);
+    expect(pdfBytes, isNotNull);
+    expect(pdfBytes.isNotEmpty, isTrue);
+  });
 }
