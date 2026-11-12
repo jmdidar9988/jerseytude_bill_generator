@@ -8,9 +8,20 @@ class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
 
   static Future<void> showAdminAuthDialogAndNavigate(BuildContext context) async {
+    // If session is already unlocked, open Admin Panel directly without asking PIN again
+    final isUnlocked = await FabricService.isAdminSessionUnlocked();
+    if (isUnlocked && context.mounted) {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const AdminPanelScreen()),
+      );
+      return;
+    }
+
     final pinController = TextEditingController();
     bool isObscured = true;
     String? errorText;
+
+    if (!context.mounted) return;
 
     final authenticated = await showDialog<bool>(
       context: context,
@@ -289,7 +300,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               await FabricService.saveFabric(fabric);
               if (!ctx.mounted) return;
               Navigator.of(ctx).pop();
-              _loadFabrics();
+              await _loadFabrics();
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('Fabric "${fabric.name}" saved!')),
@@ -322,7 +333,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
     if (confirm == true) {
       await FabricService.deleteFabric(fabric.id);
-      _loadFabrics();
+      await _loadFabrics();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Deleted "${fabric.name}"')),
@@ -395,6 +406,19 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
             onPressed: _loadFabrics,
+          ),
+          IconButton(
+            icon: const Icon(Icons.lock_outline),
+            tooltip: 'Lock Admin Panel (Logout)',
+            onPressed: () async {
+              await FabricService.logoutAdmin();
+              if (context.mounted) {
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Admin Panel locked.')),
+                );
+              }
+            },
           ),
         ],
       ),

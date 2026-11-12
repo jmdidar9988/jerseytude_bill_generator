@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'screens/home_screen.dart';
+import 'services/fabric_service.dart';
 import 'services/firestore_service.dart';
 import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await FirestoreService.init();
+  await FabricService.init();
   runApp(const JerseytudeBillGeneratorApp());
 }
 
