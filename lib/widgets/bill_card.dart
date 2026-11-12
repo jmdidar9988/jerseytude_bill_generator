@@ -9,6 +9,7 @@ class BillCard extends StatelessWidget {
   final VoidCallback onPrint;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback? onConvert;
 
   const BillCard({
     super.key,
@@ -17,6 +18,7 @@ class BillCard extends StatelessWidget {
     required this.onPrint,
     required this.onEdit,
     required this.onDelete,
+    this.onConvert,
   });
 
   @override
@@ -26,10 +28,10 @@ class BillCard extends StatelessWidget {
 
     Color statusColor;
     Color statusBg;
-    if (bill.paymentStatus.toLowerCase() == 'paid') {
+    if (bill.paymentStatus.toLowerCase() == 'paid' || (bill.grandTotal > 0 && bill.dueAmount <= 0)) {
       statusColor = AppTheme.success;
       statusBg = AppTheme.successLight;
-    } else if (bill.paymentStatus.toLowerCase() == 'partial') {
+    } else if (bill.paymentStatus.toLowerCase() == 'partial' || bill.paidAmount > 0) {
       statusColor = AppTheme.accent;
       statusBg = AppTheme.accentLight;
     } else {
@@ -56,10 +58,14 @@ class BillCard extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: AppTheme.accentLight,
+                          color: bill.isOrderInvoice ? Colors.purple.shade50 : AppTheme.accentLight,
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(Icons.receipt_long, color: AppTheme.accent, size: 20),
+                        child: Icon(
+                          bill.isOrderInvoice ? Icons.inventory_2_outlined : Icons.receipt_long,
+                          color: bill.isOrderInvoice ? Colors.purple : AppTheme.accent,
+                          size: 20,
+                        ),
                       ),
                       const SizedBox(width: 10),
                       Column(
@@ -94,7 +100,7 @@ class BillCard extends StatelessWidget {
                           ),
                         ),
                         child: Text(
-                          bill.isOrderInvoice ? 'ORDER' : 'SALE',
+                          bill.isOrderInvoice ? 'ORDER' : 'CUSTOMER',
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w800,
@@ -110,7 +116,7 @@ class BillCard extends StatelessWidget {
                           border: Border.all(color: statusColor.withValues(alpha: 0.3)),
                         ),
                         child: Text(
-                          bill.paymentStatus,
+                          bill.dueAmount <= 0 && bill.grandTotal > 0 ? 'Paid' : bill.paymentStatus,
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
@@ -125,7 +131,7 @@ class BillCard extends StatelessWidget {
 
               const Divider(height: 20),
 
-              // Customer & Project Info
+              // Customer & Financial Info
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -177,6 +183,41 @@ class BillCard extends StatelessWidget {
                           color: AppTheme.primary,
                         ),
                       ),
+                      const SizedBox(height: 4),
+                      if (bill.dueAmount > 0)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: const Color(0xFFFCA5A5)),
+                          ),
+                          child: Text(
+                            'Due: ${currency.format(bill.dueAmount)}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFFDC2626),
+                            ),
+                          ),
+                        )
+                      else if (bill.paidAmount > 0 || bill.paymentStatus.toLowerCase() == 'paid')
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF0FDF4),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: const Color(0xFF86EFAC)),
+                          ),
+                          child: const Text(
+                            '✓ Fully Paid',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF16A34A),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ],
@@ -186,27 +227,47 @@ class BillCard extends StatelessWidget {
 
               // Bottom Actions Bar
               Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  IconButton.outlined(
-                    tooltip: 'Print / Save PDF',
-                    icon: const Icon(Icons.print_outlined, size: 18),
-                    color: AppTheme.accent,
-                    onPressed: onPrint,
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.outlined(
-                    tooltip: 'Edit Invoice',
-                    icon: const Icon(Icons.edit_outlined, size: 18),
-                    color: AppTheme.textSecondary,
-                    onPressed: onEdit,
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.outlined(
-                    tooltip: 'Delete Invoice',
-                    icon: const Icon(Icons.delete_outline, size: 18),
-                    color: AppTheme.danger,
-                    onPressed: onDelete,
+                  if (onConvert != null)
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                        foregroundColor: bill.isCustomerInvoice ? Colors.purple : AppTheme.accent,
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      ),
+                      icon: const Icon(Icons.swap_horiz, size: 16),
+                      label: Text(
+                        bill.isCustomerInvoice ? 'Convert to Order' : 'Convert to Customer',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: onConvert,
+                    )
+                  else
+                    const SizedBox.shrink(),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton.outlined(
+                        tooltip: 'Print / Save PDF',
+                        icon: const Icon(Icons.print_outlined, size: 18),
+                        color: AppTheme.accent,
+                        onPressed: onPrint,
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton.outlined(
+                        tooltip: 'Edit Invoice',
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        color: AppTheme.textSecondary,
+                        onPressed: onEdit,
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton.outlined(
+                        tooltip: 'Delete Invoice',
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        color: AppTheme.danger,
+                        onPressed: onDelete,
+                      ),
+                    ],
                   ),
                 ],
               ),

@@ -8,6 +8,7 @@ import '../widgets/bill_card.dart';
 import '../widgets/stat_card.dart';
 import 'admin_panel_screen.dart';
 import 'analytics_screen.dart';
+import 'combine_invoices_screen.dart';
 import 'create_bill_screen.dart';
 import 'invoice_preview_screen.dart';
 
@@ -19,9 +20,13 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
   List<Bill> _allBills = [];
   List<Bill> _filteredBills = [];
   bool _isLoading = true;
+  int _currentView = 0; // 0: Landing Page, 1: All Invoices
+
   String _searchQuery = '';
   String _selectedFilter = 'All'; // All, Pending, Paid, Partial
   String _selectedTypeFilter = 'All'; // All, Customer, Order
@@ -61,11 +66,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
       bool matchesStatus = true;
       if (_selectedFilter == 'Pending') {
-        matchesStatus = b.paymentStatus.toLowerCase() == 'pending';
+        matchesStatus = b.paymentStatus.toLowerCase() == 'pending' || b.dueAmount > 0;
       } else if (_selectedFilter == 'Paid') {
-        matchesStatus = b.paymentStatus.toLowerCase() == 'paid';
+        matchesStatus = b.paymentStatus.toLowerCase() == 'paid' || (b.grandTotal > 0 && b.dueAmount <= 0);
       } else if (_selectedFilter == 'Partial') {
-        matchesStatus = b.paymentStatus.toLowerCase() == 'partial';
+        matchesStatus = b.paymentStatus.toLowerCase() == 'partial' || (b.paidAmount > 0 && b.dueAmount > 0);
       }
 
       bool matchesType = true;
@@ -82,11 +87,14 @@ class _HomeScreenState extends State<HomeScreen> {
   double get _totalRevenue =>
       _allBills.where((b) => b.isCustomerInvoice).fold(0.0, (sum, b) => sum + b.grandTotal);
 
-  int get _totalPendingCount =>
-      _allBills.where((b) => b.paymentStatus.toLowerCase() == 'pending').length;
+  double get _totalDue =>
+      _allBills.where((b) => b.isCustomerInvoice).fold(0.0, (sum, b) => sum + b.dueAmount);
 
   int get _totalJerseys =>
       _allBills.fold(0, (sum, b) => sum + b.totalQuantity);
+
+  int get _orderInvoicesCount =>
+      _allBills.where((b) => b.isOrderInvoice).length;
 
   void _openAnalytics() {
     Navigator.of(context).push(
@@ -100,6 +108,15 @@ class _HomeScreenState extends State<HomeScreen> {
     AdminPanelScreen.showAdminAuthDialogAndNavigate(context);
   }
 
+  void _openCombineInvoices() async {
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const CombineInvoicesScreen()),
+    );
+    if (result == true) {
+      _loadBills();
+    }
+  }
+
   void _openCreateBill({Bill? existing, String initialType = 'customer'}) async {
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
@@ -111,6 +128,38 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (result == true) {
       _loadBills();
+    }
+  }
+
+  Future<void> _convertBillType(Bill bill) async {
+    final newType = bill.isCustomerInvoice ? 'order' : 'customer';
+    final willBeOrder = newType == 'order';
+
+    String newNo = bill.invoiceNumber;
+    if (willBeOrder) {
+      if (!newNo.startsWith('JT-ORD-')) {
+        newNo = newNo.replaceFirst('JT-', 'JT-ORD-');
+      }
+    } else {
+      newNo = newNo.replaceFirst('JT-ORD-', 'JT-');
+    }
+
+    final updatedBill = Bill.fromMap(bill.toMap())
+      ..invoiceType = newType
+      ..invoiceNumber = newNo;
+
+    await FirestoreService.saveBill(updatedBill);
+    await _loadBills();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Converted to ${willBeOrder ? "Order Invoice" : "Customer Invoice"} ($newNo)!',
+          ),
+          backgroundColor: AppTheme.success,
+        ),
+      );
     }
   }
 
@@ -156,12 +205,771 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // ── LEFT SIDE HAMBURGER / 3-LINE DRAWER MENU ───────────────────────
+  Widget _buildDrawer() {
+    return Drawer(
+      child: Column(
+        children: [
+          // Drawer Header with Logo
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 48, 20, 20),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Image.asset(
+                    'assets/images/jerseytude_logo.png',
+                    height: 50,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, _, _) => const Icon(Icons.sports_soccer, size: 40, color: AppTheme.accent),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'JERSEYTUDE',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  'Custom Jersey Maker • Billing System',
+                  style: TextStyle(fontSize: 11, color: Colors.white70),
+                ),
+              ],
+            ),
+          ),
+
+          // Drawer Navigation Options
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.home_outlined, color: AppTheme.primary),
+                  title: const Text('Home / Landing Page', style: TextStyle(fontWeight: FontWeight.w600)),
+                  selected: _currentView == 0,
+                  selectedTileColor: AppTheme.accentLight.withValues(alpha: 0.5),
+                  onTap: () {
+                    Navigator.pop(context);
+                    setState(() => _currentView = 0);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.receipt_long_outlined, color: AppTheme.accent),
+                  title: const Text('All Invoices (ইনভয়েস তালিকা)', style: TextStyle(fontWeight: FontWeight.w600)),
+                  selected: _currentView == 1,
+                  selectedTileColor: AppTheme.accentLight.withValues(alpha: 0.5),
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '${_allBills.length}',
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    setState(() => _currentView = 1);
+                  },
+                ),
+                const Divider(),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  child: Text('CREATE BILLS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.add_shopping_cart, color: AppTheme.accent),
+                  title: const Text('New Customer Invoice'),
+                  subtitle: const Text('বিক্রি ও পেমেন্ট ইনভয়েস', style: TextStyle(fontSize: 11)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _openCreateBill(initialType: 'customer');
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.inventory_2_outlined, color: Colors.purple),
+                  title: const Text('New Order Invoice'),
+                  subtitle: const Text('কারখানায় অর্ডার (ফিক্সড রেট)', style: TextStyle(fontSize: 11)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _openCreateBill(initialType: 'order');
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.merge_type, color: Colors.indigo),
+                  title: const Text('Combine Invoices into Order'),
+                  subtitle: const Text('একাধিক কাস্টমার বিল একত্র করে অর্ডার', style: TextStyle(fontSize: 11)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _openCombineInvoices();
+                  },
+                ),
+                const Divider(),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  child: Text('MANAGEMENT & SYSTEM', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.admin_panel_settings_outlined, color: Color(0xFFD97706)),
+                  title: const Text('Admin Panel (PIN: 1234)'),
+                  subtitle: const Text('জার্সি ফ্যাব্রিক রেট ও স্টক ম্যানেজমেন্ট', style: TextStyle(fontSize: 11)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _openAdminPanel();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.analytics_outlined, color: Color(0xFF0284C7)),
+                  title: const Text('Business Analytics'),
+                  subtitle: const Text('মাসিক বিক্রি ও লাভ অ্যানালাইসিস', style: TextStyle(fontSize: 11)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _openAnalytics();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.restore_page_outlined, color: Colors.teal),
+                  title: const Text('Add Demo Invoice'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _restoreDemoBill();
+                  },
+                ),
+              ],
+            ),
+          ),
+
+          // Drawer Footer
+          Container(
+            padding: const EdgeInsets.all(16),
+            color: Colors.grey.shade100,
+            child: const Row(
+              children: [
+                Icon(Icons.verified, size: 16, color: AppTheme.success),
+                SizedBox(width: 8),
+                Text('Jerseytude Official v2.1', style: TextStyle(fontSize: 11, color: Colors.black54)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── 1. LANDING PAGE DESIGN (BRAND HERO & QUICK ACTIONS) ────────────
+  Widget _buildLandingPage(NumberFormat currency) {
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 950),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Hero Brand Banner with Jerseytude Logo
+              Container(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0F172A), Color(0xFF1E3A8A)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0F172A).withValues(alpha: 0.3),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+                child: Column(
+                  children: [
+                    // Brand Logo with White Glow Card
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.25),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Image.asset(
+                        'assets/images/jerseytude_logo.png',
+                        height: 75,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, _, _) => const Icon(
+                          Icons.sports_soccer,
+                          size: 60,
+                          color: AppTheme.accent,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'JERSEYTUDE',
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                        letterSpacing: 3,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'CUSTOM SPORTS APPAREL & DUAL INVOICING PLATFORM',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF93C5FD),
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Value Badges
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        _buildHeroBadge(Icons.check_circle, 'Customer Invoices'),
+                        _buildHeroBadge(Icons.inventory, 'Factory Order Invoices'),
+                        _buildHeroBadge(Icons.merge, 'Batch Order Merging'),
+                        _buildHeroBadge(Icons.lock, 'Admin Fabric Catalog'),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Quick Actions Grid (Main Hub Buttons)
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildActionTile(
+                      icon: Icons.receipt_long,
+                      title: 'Customer Invoice',
+                      subtitle: 'নতুন কাস্টমার বিক্রি ও পেমেন্ট বিল',
+                      gradient: const [Color(0xFF0284C7), Color(0xFF0369A1)],
+                      onTap: () => _openCreateBill(initialType: 'customer'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildActionTile(
+                      icon: Icons.inventory_2,
+                      title: 'Factory Order',
+                      subtitle: 'জার্সি অর্ডারের পাইকারি বিল (ফিক্সড রেট)',
+                      gradient: const [Color(0xFF7C3AED), Color(0xFF6D28D9)],
+                      onTap: () => _openCreateBill(initialType: 'order'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildActionTile(
+                      icon: Icons.merge_type,
+                      title: 'Combine Invoices',
+                      subtitle: 'একাধিক কাস্টমার বিল একত্র করে অর্ডার তৈরি',
+                      gradient: const [Color(0xFF0D9488), Color(0xFF0F766E)],
+                      onTap: _openCombineInvoices,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildActionTile(
+                      icon: Icons.admin_panel_settings,
+                      title: 'Admin Panel',
+                      subtitle: 'ফ্যাব্রিক রেট ও আইটেম (PIN: 1234)',
+                      gradient: const [Color(0xFFEA580C), Color(0xFFC2410C)],
+                      onTap: _openAdminPanel,
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 24),
+
+              // Live Financial & Production Metrics
+              const Text(
+                'Business Overview',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.primary,
+                ),
+              ),
+              const SizedBox(height: 10),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isWide = constraints.maxWidth > 650;
+                  return Flex(
+                    direction: isWide ? Axis.horizontal : Axis.vertical,
+                    children: [
+                      Expanded(
+                        flex: isWide ? 1 : 0,
+                        child: StatCard(
+                          title: 'Total Revenue',
+                          value: currency.format(_totalRevenue),
+                          icon: Icons.payments,
+                          color: AppTheme.success,
+                          bgColor: AppTheme.successLight,
+                        ),
+                      ),
+                      if (isWide) const SizedBox(width: 12) else const SizedBox(height: 8),
+                      Expanded(
+                        flex: isWide ? 1 : 0,
+                        child: StatCard(
+                          title: 'Total Due (বকেয়া)',
+                          value: currency.format(_totalDue),
+                          icon: Icons.money_off,
+                          color: _totalDue > 0 ? AppTheme.danger : AppTheme.success,
+                          bgColor: _totalDue > 0 ? const Color(0xFFFEE2E2) : AppTheme.successLight,
+                        ),
+                      ),
+                      if (isWide) const SizedBox(width: 12) else const SizedBox(height: 8),
+                      Expanded(
+                        flex: isWide ? 1 : 0,
+                        child: StatCard(
+                          title: 'Jerseys Produced',
+                          value: '$_totalJerseys pcs',
+                          icon: Icons.sports_soccer,
+                          color: AppTheme.accent,
+                          bgColor: AppTheme.accentLight,
+                        ),
+                      ),
+                      if (isWide) const SizedBox(width: 12) else const SizedBox(height: 8),
+                      Expanded(
+                        flex: isWide ? 1 : 0,
+                        child: StatCard(
+                          title: 'Orders / Invoices',
+                          value: '${_allBills.length} ($_orderInvoicesCount ord)',
+                          icon: Icons.receipt_long,
+                          color: AppTheme.primary,
+                          bgColor: AppTheme.border,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+
+              const SizedBox(height: 24),
+
+              // Recent Invoices Header
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Recent Invoices',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.primary,
+                    ),
+                  ),
+                  TextButton.icon(
+                    icon: const Icon(Icons.arrow_forward, size: 16),
+                    label: const Text('View All Invoices'),
+                    onPressed: () => setState(() => _currentView = 1),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+
+              // Recent Invoices List (Up to 5)
+              if (_allBills.isEmpty)
+                Container(
+                  padding: const EdgeInsets.all(32),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.border),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(Icons.receipt_long_outlined, size: 48, color: Colors.grey.shade400),
+                      const SizedBox(height: 10),
+                      const Text('No invoices yet. Click below to create your first invoice!'),
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.add),
+                        label: const Text('Create Customer Invoice'),
+                        onPressed: () => _openCreateBill(initialType: 'customer'),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _allBills.length > 5 ? 5 : _allBills.length,
+                  itemBuilder: (context, index) {
+                    final bill = _allBills[index];
+                    return BillCard(
+                      bill: bill,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => InvoicePreviewScreen(bill: bill)),
+                        );
+                      },
+                      onPrint: () => PdfInvoiceService.printInvoice(bill),
+                      onEdit: () => _openCreateBill(existing: bill),
+                      onDelete: () => _deleteBill(bill),
+                      onConvert: () => _convertBillType(bill),
+                    );
+                  },
+                ),
+
+              const SizedBox(height: 40),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeroBadge(IconData icon, String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: const Color(0xFF60A5FA)),
+          const SizedBox(width: 5),
+          Text(text, style: const TextStyle(fontSize: 11, color: Colors.white)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required List<Color> gradient,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(colors: gradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: gradient[0].withValues(alpha: 0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: Colors.white, size: 24),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(color: Colors.white70, fontSize: 11),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 14),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── 2. ALL INVOICES VIEW (SEARCH, FILTERS & FULL LIST) ───────────────
+  Widget _buildAllInvoicesView() {
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(16),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 850),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Search & Filter Card
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText: 'Search by Customer, Phone, Project, or Invoice No...',
+                          prefixIcon: const Icon(Icons.search, size: 20),
+                          suffixIcon: _searchQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 18),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    setState(() {
+                                      _searchQuery = '';
+                                      _applyFilter();
+                                    });
+                                  },
+                                )
+                              : null,
+                        ),
+                        onChanged: (val) {
+                          setState(() {
+                            _searchQuery = val;
+                            _applyFilter();
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          const Text('Type: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+                          const SizedBox(width: 6),
+                          Wrap(
+                            spacing: 6,
+                            children: [
+                              {'label': 'All Types', 'value': 'All'},
+                              {'label': 'Customer', 'value': 'Customer'},
+                              {'label': 'Order', 'value': 'Order'},
+                            ].map((item) {
+                              final val = item['value']!;
+                              final isSelected = _selectedTypeFilter == val;
+                              final isOrder = val == 'Order';
+                              return FilterChip(
+                                label: Text(item['label']!, style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                  color: isSelected ? Colors.white : AppTheme.textPrimary,
+                                )),
+                                selected: isSelected,
+                                selectedColor: isOrder ? Colors.purple : AppTheme.accent,
+                                backgroundColor: Colors.grey.shade100,
+                                showCheckmark: false,
+                                onSelected: (selected) {
+                                  if (selected) {
+                                    setState(() {
+                                      _selectedTypeFilter = val;
+                                      _applyFilter();
+                                    });
+                                  }
+                                },
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Text('Status: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+                          const SizedBox(width: 6),
+                          Wrap(
+                            spacing: 8,
+                            children: ['All', 'Pending', 'Paid', 'Partial'].map((f) {
+                              final isSelected = _selectedFilter == f;
+                              return FilterChip(
+                                label: Text(f, style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                  color: isSelected ? Colors.white : AppTheme.textPrimary,
+                                )),
+                                selected: isSelected,
+                                selectedColor: AppTheme.accent,
+                                backgroundColor: Colors.grey.shade100,
+                                showCheckmark: false,
+                                onSelected: (selected) {
+                                  if (selected) {
+                                    setState(() {
+                                      _selectedFilter = f;
+                                      _applyFilter();
+                                    });
+                                  }
+                                },
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Header Bar
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Invoices (${_filteredBills.length})',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.primary,
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      TextButton.icon(
+                        style: TextButton.styleFrom(foregroundColor: Colors.purple),
+                        icon: const Icon(Icons.inventory_2_outlined, size: 15),
+                        label: const Text('+ Order Inv'),
+                        onPressed: () => _openCreateBill(initialType: 'order'),
+                      ),
+                      const SizedBox(width: 4),
+                      TextButton.icon(
+                        icon: const Icon(Icons.add, size: 15),
+                        label: const Text('+ Customer Inv'),
+                        onPressed: () => _openCreateBill(initialType: 'customer'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 10),
+
+              // Invoices List
+              if (_filteredBills.isEmpty)
+                Container(
+                  padding: const EdgeInsets.all(40),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.border),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.receipt_long_outlined, size: 56, color: Colors.grey.shade400),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'No invoices found matching criteria',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _filteredBills.length,
+                  itemBuilder: (context, index) {
+                    final bill = _filteredBills[index];
+                    return BillCard(
+                      bill: bill,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => InvoicePreviewScreen(bill: bill),
+                          ),
+                        );
+                      },
+                      onPrint: () => PdfInvoiceService.printInvoice(bill),
+                      onEdit: () => _openCreateBill(existing: bill),
+                      onDelete: () => _deleteBill(bill),
+                      onConvert: () => _convertBillType(bill),
+                    );
+                  },
+                ),
+
+              const SizedBox(height: 80),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currency = NumberFormat.compactCurrency(symbol: '৳', decimalDigits: 0);
 
     return Scaffold(
+      key: _scaffoldKey,
+      drawer: _buildDrawer(),
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.menu, size: 26),
+          tooltip: 'Menu / Navigation (সকল অপশন)',
+          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+        ),
         title: Row(
           children: [
             Container(
@@ -172,28 +980,19 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               child: Image.asset(
                 'assets/images/jerseytude_logo.png',
-                height: 30,
+                height: 28,
                 fit: BoxFit.contain,
                 errorBuilder: (_, _, _) => const Icon(Icons.sports_soccer, color: AppTheme.accent),
               ),
             ),
             const SizedBox(width: 10),
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'JERSEYTUDE',
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.5,
-                  ),
-                ),
-                Text(
-                  'Custom Jersey Maker • Invoice & Business System',
-                  style: TextStyle(fontSize: 10, color: Colors.white70),
-                ),
-              ],
+            Text(
+              _currentView == 0 ? 'JERSEYTUDE' : 'ALL INVOICES',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.2,
+              ),
             ),
           ],
         ),
@@ -205,18 +1004,29 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.analytics_outlined),
-            tooltip: 'Monthly Analysis',
+            tooltip: 'Business Analytics',
             onPressed: _openAnalytics,
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh Invoices',
+            tooltip: 'Refresh',
             onPressed: _loadBills,
           ),
-          IconButton(
-            icon: const Icon(Icons.restore_page),
-            tooltip: 'Add Demo Invoice',
-            onPressed: _restoreDemoBill,
+        ],
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentView,
+        onTap: (index) => setState(() => _currentView = index),
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.receipt_long_outlined),
+            activeIcon: Icon(Icons.receipt_long),
+            label: 'Invoices',
           ),
         ],
       ),
@@ -230,7 +1040,7 @@ class _HomeScreenState extends State<HomeScreen> {
             backgroundColor: Colors.purple,
             foregroundColor: Colors.white,
             icon: const Icon(Icons.inventory_2_outlined, size: 18),
-            label: const Text('New Order Invoice', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            label: const Text('Order Invoice', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
           ),
           const SizedBox(height: 8),
           FloatingActionButton.extended(
@@ -239,7 +1049,7 @@ class _HomeScreenState extends State<HomeScreen> {
             backgroundColor: AppTheme.accent,
             foregroundColor: Colors.white,
             icon: const Icon(Icons.receipt_long, size: 18),
-            label: const Text('New Customer Invoice', style: TextStyle(fontWeight: FontWeight.bold)),
+            label: const Text('Customer Invoice', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -247,313 +1057,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _loadBills,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 850),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // Analytics Quick Access Banner
-                        InkWell(
-                          onTap: _openAnalytics,
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [AppTheme.primary, Color(0xFF1E3A8A)],
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Row(
-                              children: [
-                                Icon(Icons.query_stats, color: Colors.white, size: 28),
-                                SizedBox(width: 14),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Monthly Business Analysis',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                      Text(
-                                        'View monthly sales breakdown, collection rate & top-selling jerseys',
-                                        style: TextStyle(color: Colors.white70, fontSize: 11),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 16),
-
-                        // Dashboard Summary Stats
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            final isWide = constraints.maxWidth > 600;
-                            return Flex(
-                              direction: isWide ? Axis.horizontal : Axis.vertical,
-                              children: [
-                                Expanded(
-                                  flex: isWide ? 1 : 0,
-                                  child: StatCard(
-                                    title: 'Total Invoices',
-                                    value: '${_allBills.length}',
-                                    icon: Icons.receipt_long,
-                                    color: AppTheme.primary,
-                                    bgColor: AppTheme.border,
-                                  ),
-                                ),
-                                if (isWide) const SizedBox(width: 12) else const SizedBox(height: 8),
-                                Expanded(
-                                  flex: isWide ? 1 : 0,
-                                  child: StatCard(
-                                    title: 'Total Revenue',
-                                    value: currency.format(_totalRevenue),
-                                    icon: Icons.payments,
-                                    color: AppTheme.success,
-                                    bgColor: AppTheme.successLight,
-                                  ),
-                                ),
-                                if (isWide) const SizedBox(width: 12) else const SizedBox(height: 8),
-                                Expanded(
-                                  flex: isWide ? 1 : 0,
-                                  child: StatCard(
-                                    title: 'Jerseys Produced',
-                                    value: '$_totalJerseys pcs',
-                                    icon: Icons.sports_soccer,
-                                    color: AppTheme.accent,
-                                    bgColor: AppTheme.accentLight,
-                                  ),
-                                ),
-                                if (isWide) const SizedBox(width: 12) else const SizedBox(height: 8),
-                                Expanded(
-                                  flex: isWide ? 1 : 0,
-                                  child: StatCard(
-                                    title: 'Pending Bills',
-                                    value: '$_totalPendingCount',
-                                    icon: Icons.pending_actions,
-                                    color: AppTheme.warning,
-                                    bgColor: AppTheme.warningLight,
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-
-                        const SizedBox(height: 20),
-
-                        // Search and Filter Bar
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              children: [
-                                TextField(
-                                  controller: _searchController,
-                                  decoration: InputDecoration(
-                                    hintText: 'Search by Customer, Phone, Project, or Invoice No...',
-                                    prefixIcon: const Icon(Icons.search, size: 20),
-                                    suffixIcon: _searchQuery.isNotEmpty
-                                        ? IconButton(
-                                            icon: const Icon(Icons.clear, size: 18),
-                                            onPressed: () {
-                                              _searchController.clear();
-                                              setState(() {
-                                                _searchQuery = '';
-                                                _applyFilter();
-                                              });
-                                            },
-                                          )
-                                        : null,
-                                  ),
-                                  onChanged: (val) {
-                                    setState(() {
-                                      _searchQuery = val;
-                                      _applyFilter();
-                                    });
-                                  },
-                                ),
-                                const SizedBox(height: 10),
-                                // Type Filter
-                                Row(
-                                  children: [
-                                    const Text('Type: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
-                                    const SizedBox(width: 6),
-                                    Wrap(
-                                      spacing: 6,
-                                      children: [
-                                        {'label': 'All Types', 'value': 'All'},
-                                        {'label': 'Customer', 'value': 'Customer'},
-                                        {'label': 'Order', 'value': 'Order'},
-                                      ].map((item) {
-                                        final val = item['value']!;
-                                        final isSelected = _selectedTypeFilter == val;
-                                        final isOrder = val == 'Order';
-                                        return FilterChip(
-                                          label: Text(item['label']!, style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                                            color: isSelected ? Colors.white : AppTheme.textPrimary,
-                                          )),
-                                          selected: isSelected,
-                                          selectedColor: isOrder ? Colors.purple : AppTheme.accent,
-                                          backgroundColor: Colors.grey.shade100,
-                                          showCheckmark: false,
-                                          onSelected: (selected) {
-                                            if (selected) {
-                                              setState(() {
-                                                _selectedTypeFilter = val;
-                                                _applyFilter();
-                                              });
-                                            }
-                                          },
-                                        );
-                                      }).toList(),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    const Text('Status: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
-                                    const SizedBox(width: 6),
-                                    Wrap(
-                                      spacing: 8,
-                                      children: ['All', 'Pending', 'Paid', 'Partial'].map((f) {
-                                        final isSelected = _selectedFilter == f;
-                                        return FilterChip(
-                                          label: Text(f, style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                                            color: isSelected ? Colors.white : AppTheme.textPrimary,
-                                          )),
-                                          selected: isSelected,
-                                          selectedColor: AppTheme.accent,
-                                          backgroundColor: Colors.grey.shade100,
-                                          showCheckmark: false,
-                                          onSelected: (selected) {
-                                            if (selected) {
-                                              setState(() {
-                                                _selectedFilter = f;
-                                                _applyFilter();
-                                              });
-                                            }
-                                          },
-                                        );
-                                      }).toList(),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 16),
-
-                        // Invoices Header
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Cloud Invoices (${_filteredBills.length})',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: AppTheme.primary,
-                              ),
-                            ),
-                            Row(
-                              children: [
-                                TextButton.icon(
-                                  style: TextButton.styleFrom(foregroundColor: Colors.purple),
-                                  icon: const Icon(Icons.inventory_2_outlined, size: 15),
-                                  label: const Text('+ Order Inv'),
-                                  onPressed: () => _openCreateBill(initialType: 'order'),
-                                ),
-                                const SizedBox(width: 4),
-                                TextButton.icon(
-                                  icon: const Icon(Icons.add, size: 15),
-                                  label: const Text('+ Customer Inv'),
-                                  onPressed: () => _openCreateBill(initialType: 'customer'),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 10),
-
-                        // List of Invoices
-                        if (_filteredBills.isEmpty)
-                          Container(
-                            padding: const EdgeInsets.all(40),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: AppTheme.border),
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.receipt_long_outlined, size: 56, color: Colors.grey.shade400),
-                                const SizedBox(height: 12),
-                                const Text(
-                                  'No invoices found in database',
-                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
-                                ),
-                                const SizedBox(height: 16),
-                                ElevatedButton.icon(
-                                  icon: const Icon(Icons.add, size: 18),
-                                  label: const Text('Create New Invoice'),
-                                  onPressed: () => _openCreateBill(),
-                                ),
-                              ],
-                            ),
-                          )
-                        else
-                          ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: _filteredBills.length,
-                            itemBuilder: (context, index) {
-                              final bill = _filteredBills[index];
-                              return BillCard(
-                                bill: bill,
-                                onTap: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => InvoicePreviewScreen(bill: bill),
-                                    ),
-                                  );
-                                },
-                                onPrint: () => PdfInvoiceService.printInvoice(bill),
-                                onEdit: () => _openCreateBill(existing: bill),
-                                onDelete: () => _deleteBill(bill),
-                              );
-                            },
-                          ),
-
-                        const SizedBox(height: 80),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+              child: _currentView == 0
+                  ? _buildLandingPage(currency)
+                  : _buildAllInvoicesView(),
             ),
     );
   }

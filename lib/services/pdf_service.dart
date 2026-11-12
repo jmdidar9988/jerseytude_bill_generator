@@ -45,8 +45,8 @@ class PdfInvoiceService {
     const borderColor = PdfColor.fromInt(0xFFE2E8F0); // Slate 200
     const tableHeaderBg = PdfColor.fromInt(0xFF0F172A); // Dark header bar
 
-    final isPaid = bill.paymentStatus.toLowerCase() == 'paid';
-    final isPartial = bill.paymentStatus.toLowerCase() == 'partial';
+    final isPaid = bill.paymentStatus.toLowerCase() == 'paid' || (bill.grandTotal > 0 && bill.dueAmount <= 0);
+    final isPartial = !isPaid && bill.paidAmount > 0;
 
     // QR Code verification data string
     final qrData = '${bill.isOrderInvoice ? "JERSEYTUDE OFFICIAL ORDER INVOICE" : "JERSEYTUDE OFFICIAL INVOICE"}\n'
@@ -56,6 +56,8 @@ class PdfInvoiceService {
         'Party: ${bill.customerName}\n'
         'Phone: ${bill.customerPhone}\n'
         'Total: BDT ${bill.grandTotal.toStringAsFixed(0)}\n'
+        'Paid: BDT ${bill.paidAmount.toStringAsFixed(0)}\n'
+        'Due: BDT ${bill.dueAmount.toStringAsFixed(0)}\n'
         'Status: ${bill.paymentStatus.toUpperCase()}\n'
         'Official Verification: jerseytude.official@gmail.com';
 
@@ -411,19 +413,19 @@ class PdfInvoiceService {
                   color: cardBg,
                   border: pw.Border(
                     top: pw.BorderSide(color: primaryDark, width: 1.0),
-                    bottom: pw.BorderSide(color: borderColor, width: 0.8),
+                    bottom: pw.BorderSide(color: borderColor, width: 0.5),
                   ),
                 ),
                 children: [
                   pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                    padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                     child: pw.Text(
-                      'Grand Total Summary',
-                      style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: primaryDark),
+                      'Total Quantity',
+                      style: pw.TextStyle(font: fontBold, fontSize: 9, color: primaryDark),
                     ),
                   ),
                   pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                    padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                     child: pw.Text(
                       '${bill.totalQuantity} pcs',
                       textAlign: pw.TextAlign.center,
@@ -431,19 +433,85 @@ class PdfInvoiceService {
                     ),
                   ),
                   pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                    padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                     child: pw.Text(
-                      '-',
+                      'Total Bill:',
                       textAlign: pw.TextAlign.right,
-                      style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: primaryDark),
+                      style: pw.TextStyle(font: fontBold, fontSize: 9, color: primaryDark),
                     ),
                   ),
                   pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                    padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                     child: pw.Text(
                       currencyFormat.format(bill.grandTotal),
                       textAlign: pw.TextAlign.right,
-                      style: pw.TextStyle(font: fontBold, fontSize: 10.5, color: primaryDark),
+                      style: pw.TextStyle(font: fontBold, fontSize: 10, color: primaryDark),
+                    ),
+                  ),
+                ],
+              ),
+              // Paid Amount Row
+              pw.TableRow(
+                decoration: const pw.BoxDecoration(
+                  color: PdfColors.white,
+                  border: pw.Border(
+                    bottom: pw.BorderSide(color: borderColor, width: 0.5),
+                  ),
+                ),
+                children: [
+                  pw.Container(),
+                  pw.Container(),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+                    child: pw.Text(
+                      'Paid Amount:',
+                      textAlign: pw.TextAlign.right,
+                      style: pw.TextStyle(font: fontBold, fontSize: 8.5, color: const PdfColor.fromInt(0xFF166534)),
+                    ),
+                  ),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+                    child: pw.Text(
+                      currencyFormat.format(bill.paidAmount),
+                      textAlign: pw.TextAlign.right,
+                      style: pw.TextStyle(font: fontBold, fontSize: 9, color: const PdfColor.fromInt(0xFF166534)),
+                    ),
+                  ),
+                ],
+              ),
+              // Due Amount Row
+              pw.TableRow(
+                decoration: pw.BoxDecoration(
+                  color: bill.dueAmount > 0 ? const PdfColor.fromInt(0xFFFEF2F2) : const PdfColor.fromInt(0xFFF0FDF4),
+                  border: const pw.Border(
+                    bottom: pw.BorderSide(color: borderColor, width: 0.8),
+                  ),
+                ),
+                children: [
+                  pw.Container(),
+                  pw.Container(),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                    child: pw.Text(
+                      'Due Amount:',
+                      textAlign: pw.TextAlign.right,
+                      style: pw.TextStyle(
+                        font: fontBold,
+                        fontSize: 9.5,
+                        color: bill.dueAmount > 0 ? const PdfColor.fromInt(0xFFDC2626) : const PdfColor.fromInt(0xFF16A34A),
+                      ),
+                    ),
+                  ),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                    child: pw.Text(
+                      currencyFormat.format(bill.dueAmount),
+                      textAlign: pw.TextAlign.right,
+                      style: pw.TextStyle(
+                        font: fontBold,
+                        fontSize: 10.5,
+                        color: bill.dueAmount > 0 ? const PdfColor.fromInt(0xFFDC2626) : const PdfColor.fromInt(0xFF16A34A),
+                      ),
                     ),
                   ),
                 ],

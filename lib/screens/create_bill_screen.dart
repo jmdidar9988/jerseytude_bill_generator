@@ -43,6 +43,9 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
   late TextEditingController _addressController;
   late TextEditingController _phoneController;
   late TextEditingController _projectController;
+  late TextEditingController _deliveryFeeController;
+  late TextEditingController _discountController;
+  late TextEditingController _paidController;
 
   late DateTime _selectedDate;
   String _selectedStatus = 'Pending';
@@ -63,6 +66,12 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
       _addressController = TextEditingController(text: bill.customerAddress);
       _phoneController = TextEditingController(text: bill.customerPhone);
       _projectController = TextEditingController(text: bill.project);
+      _deliveryFeeController = TextEditingController(
+          text: bill.deliveryFee > 0 ? bill.deliveryFee.toStringAsFixed(0) : '');
+      _discountController = TextEditingController(
+          text: bill.discount > 0 ? bill.discount.toStringAsFixed(0) : '');
+      _paidController = TextEditingController(
+          text: bill.paidAmount > 0 ? bill.paidAmount.toStringAsFixed(0) : '');
       _selectedDate = bill.date;
       _selectedStatus = bill.paymentStatus;
       _items = List.from(bill.items);
@@ -72,6 +81,9 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
       _addressController = TextEditingController();
       _phoneController = TextEditingController();
       _projectController = TextEditingController(text: 'Custom Sports Apparel');
+      _deliveryFeeController = TextEditingController();
+      _discountController = TextEditingController();
+      _paidController = TextEditingController();
       _selectedDate = DateTime.now();
       _items = [];
       _generateInvoiceNumber();
@@ -168,11 +180,59 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
     _addressController.dispose();
     _phoneController.dispose();
     _projectController.dispose();
+    _deliveryFeeController.dispose();
+    _discountController.dispose();
+    _paidController.dispose();
     super.dispose();
   }
 
-  double get _grandTotal => _items.fold(0.0, (sum, i) => sum + i.totalPrice);
+  double get _subtotal => _items.fold(0.0, (sum, i) => sum + i.totalPrice);
+  double get _deliveryFee => double.tryParse(_deliveryFeeController.text.trim()) ?? 0.0;
+  double get _discount => double.tryParse(_discountController.text.trim()) ?? 0.0;
+  double get _grandTotal {
+    final t = _subtotal + _deliveryFee - _discount;
+    return t < 0 ? 0.0 : t;
+  }
+  double get _paidAmount => double.tryParse(_paidController.text.trim()) ?? 0.0;
+  double get _dueAmount {
+    final d = _grandTotal - _paidAmount;
+    return d < 0 ? 0.0 : d;
+  }
   int get _totalQuantity => _items.fold(0, (sum, i) => sum + i.quantity);
+
+  void _onFinancialsChanged() {
+    setState(() {
+      if (_grandTotal > 0 && _dueAmount <= 0) {
+        _selectedStatus = 'Paid';
+      } else if (_paidAmount > 0) {
+        _selectedStatus = 'Partial';
+      } else {
+        _selectedStatus = 'Pending';
+      }
+    });
+  }
+
+  void _setFullPaid() {
+    setState(() {
+      _paidController.text = _grandTotal.toStringAsFixed(0);
+      _selectedStatus = 'Paid';
+    });
+  }
+
+  void _setPartialHalf() {
+    final half = (_grandTotal / 2).round();
+    setState(() {
+      _paidController.text = half.toString();
+      _selectedStatus = 'Partial';
+    });
+  }
+
+  void _clearPaid() {
+    setState(() {
+      _paidController.text = '0';
+      _selectedStatus = 'Pending';
+    });
+  }
 
   void _addItem() async {
     final result = await showDialog<OrderItem>(
@@ -213,6 +273,9 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
       customerPhone: _phoneController.text.trim(),
       project: _projectController.text.trim(),
       items: _items,
+      deliveryFee: _deliveryFee,
+      discount: _discount,
+      paidAmount: _paidAmount,
     );
   }
 
@@ -720,36 +783,189 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
 
                           const SizedBox(height: 12),
                           const Divider(height: 1),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 14),
 
-                          // Total Bar
+                          // Additional Financials: Delivery Fee & Discount
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextFormField(
+                                  controller: _deliveryFeeController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Delivery Charge (৳)',
+                                    hintText: '0',
+                                    prefixIcon: Icon(Icons.local_shipping_outlined, size: 18),
+                                    isDense: true,
+                                  ),
+                                  onChanged: (_) => _onFinancialsChanged(),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: TextFormField(
+                                  controller: _discountController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Special Discount (৳)',
+                                    hintText: '0',
+                                    prefixIcon: Icon(Icons.discount_outlined, size: 18),
+                                    isDense: true,
+                                  ),
+                                  onChanged: (_) => _onFinancialsChanged(),
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 14),
+
+                          // Total & Financial Breakdown Bar
                           Container(
                             padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
                               color: isCustomer ? AppTheme.accentLight : Colors.purple.shade50,
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: isCustomer
+                                    ? AppTheme.accent.withValues(alpha: 0.2)
+                                    : Colors.purple.withValues(alpha: 0.2),
+                              ),
                             ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Text('Total Pieces: $_totalQuantity pcs', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      NumberToWords.convert(_grandTotal),
-                                      style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('Total Pieces: $_totalQuantity pcs',
+                                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          NumberToWords.convert(_grandTotal),
+                                          style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+                                        ),
+                                      ],
+                                    ),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        const Text('Grand Total', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                                        Text(
+                                          currency.format(_grandTotal),
+                                          style: TextStyle(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.w800,
+                                            color: isCustomer ? AppTheme.primary : Colors.purple,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
-                                Text(
-                                  currency.format(_grandTotal),
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: isCustomer ? AppTheme.primary : Colors.purple,
-                                  ),
+
+                                const Divider(height: 20),
+
+                                // Paid Amount Input & Quick Buttons
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      flex: 3,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          TextFormField(
+                                            controller: _paidController,
+                                            keyboardType: TextInputType.number,
+                                            decoration: InputDecoration(
+                                              labelText: 'Paid Amount (পরিশোধিত টাকা)',
+                                              hintText: 'e.g. 1500',
+                                              prefixIcon: const Icon(Icons.payments_outlined, size: 18),
+                                              suffixText: '৳',
+                                              isDense: true,
+                                              filled: true,
+                                              fillColor: Colors.white,
+                                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                            ),
+                                            onChanged: (_) => _onFinancialsChanged(),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Wrap(
+                                            spacing: 6,
+                                            children: [
+                                              ActionChip(
+                                                label: const Text('Full Paid', style: TextStyle(fontSize: 11)),
+                                                avatar: const Icon(Icons.check_circle_outline, size: 14, color: AppTheme.success),
+                                                onPressed: _setFullPaid,
+                                              ),
+                                              ActionChip(
+                                                label: const Text('50% Adv', style: TextStyle(fontSize: 11)),
+                                                avatar: const Icon(Icons.pie_chart_outline, size: 14, color: AppTheme.accent),
+                                                onPressed: _setPartialHalf,
+                                              ),
+                                              ActionChip(
+                                                label: const Text('Due All', style: TextStyle(fontSize: 11)),
+                                                avatar: const Icon(Icons.money_off, size: 14, color: AppTheme.warning),
+                                                onPressed: _clearPaid,
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      flex: 2,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: _dueAmount > 0 ? const Color(0xFFFEF2F2) : const Color(0xFFF0FDF4),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(
+                                            color: _dueAmount > 0 ? const Color(0xFFFCA5A5) : const Color(0xFF86EFAC),
+                                          ),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.center,
+                                          children: [
+                                            Text(
+                                              _dueAmount > 0 ? 'DUE AMOUNT (বকেয়া)' : 'STATUS',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w700,
+                                                color: _dueAmount > 0 ? const Color(0xFF991B1B) : const Color(0xFF166534),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              _dueAmount > 0 ? currency.format(_dueAmount) : 'FULL PAID',
+                                              style: TextStyle(
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.w900,
+                                                color: _dueAmount > 0 ? const Color(0xFFDC2626) : const Color(0xFF16A34A),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: Colors.white,
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                'Status: $_selectedStatus',
+                                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),

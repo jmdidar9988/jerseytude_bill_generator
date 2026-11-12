@@ -33,10 +33,11 @@
   <link rel="manifest" href="manifest.json">
 
   <!-- PDF.js support for 'printing' package on Web -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
-    var dartPdfJsBaseUrl = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.2.146/";
+    window.pdfjsLib = window.pdfjsLib || {};
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
   </script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.2.146/pdf.min.js"></script>
 </head>
 <body>
   <!--
