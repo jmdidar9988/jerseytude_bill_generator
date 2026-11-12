@@ -33,7 +33,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final currency = NumberFormat.currency(symbol: '৳ ', decimalDigits: 0);
+    final currency = NumberFormat.currency(symbol: 'BDT ', decimalDigits: 0);
 
     return Scaffold(
       appBar: AppBar(

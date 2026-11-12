@@ -280,7 +280,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 ListTile(
                   leading: const Icon(Icons.receipt_long_outlined, color: AppTheme.accent),
-                  title: const Text('All Invoices (ইনভয়েস তালিকা)', style: TextStyle(fontWeight: FontWeight.w600)),
+                  title: const Text('All Invoices Directory', style: TextStyle(fontWeight: FontWeight.w600)),
                   selected: _currentView == 1,
                   selectedTileColor: AppTheme.accentLight.withValues(alpha: 0.5),
                   trailing: Container(
@@ -307,7 +307,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ListTile(
                   leading: const Icon(Icons.add_shopping_cart, color: AppTheme.accent),
                   title: const Text('New Customer Invoice'),
-                  subtitle: const Text('বিক্রি ও পেমেন্ট ইনভয়েস', style: TextStyle(fontSize: 11)),
+                  subtitle: const Text('Sales, client details & payments', style: TextStyle(fontSize: 11)),
                   onTap: () {
                     Navigator.pop(context);
                     _openCreateBill(initialType: 'customer');
@@ -316,7 +316,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ListTile(
                   leading: const Icon(Icons.inventory_2_outlined, color: Colors.purple),
                   title: const Text('New Order Invoice'),
-                  subtitle: const Text('কারখানায় অর্ডার (ফিক্সড রেট)', style: TextStyle(fontSize: 11)),
+                  subtitle: const Text('Wholesale factory purchase with fixed rates', style: TextStyle(fontSize: 11)),
                   onTap: () {
                     Navigator.pop(context);
                     _openCreateBill(initialType: 'order');
@@ -325,7 +325,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ListTile(
                   leading: const Icon(Icons.merge_type, color: Colors.indigo),
                   title: const Text('Combine Invoices into Order'),
-                  subtitle: const Text('একাধিক কাস্টমার বিল একত্র করে অর্ডার', style: TextStyle(fontSize: 11)),
+                  subtitle: const Text('Consolidate multiple orders for manufacturing', style: TextStyle(fontSize: 11)),
                   onTap: () {
                     Navigator.pop(context);
                     _openCombineInvoices();
@@ -339,7 +339,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ListTile(
                   leading: const Icon(Icons.admin_panel_settings_outlined, color: Color(0xFFD97706)),
                   title: const Text('Admin Panel (PIN: 1234)'),
-                  subtitle: const Text('জার্সি ফ্যাব্রিক রেট ও স্টক ম্যানেজমেন্ট', style: TextStyle(fontSize: 11)),
+                  subtitle: const Text('Fabric pricing & inventory management', style: TextStyle(fontSize: 11)),
                   onTap: () {
                     Navigator.pop(context);
                     _openAdminPanel();
@@ -348,7 +348,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ListTile(
                   leading: const Icon(Icons.analytics_outlined, color: Color(0xFF0284C7)),
                   title: const Text('Business Analytics'),
-                  subtitle: const Text('মাসিক বিক্রি ও লাভ অ্যানালাইসিস', style: TextStyle(fontSize: 11)),
+                  subtitle: const Text('Monthly breakdown, profits & metrics', style: TextStyle(fontSize: 11)),
                   onTap: () {
                     Navigator.pop(context);
                     _openAnalytics();
@@ -486,7 +486,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: _buildActionTile(
                       icon: Icons.receipt_long,
                       title: 'Customer Invoice',
-                      subtitle: 'নতুন কাস্টমার বিক্রি ও পেমেন্ট বিল',
+                      subtitle: 'Generate client bill & collect payment',
                       gradient: const [Color(0xFF0284C7), Color(0xFF0369A1)],
                       onTap: () => _openCreateBill(initialType: 'customer'),
                     ),
@@ -496,7 +496,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: _buildActionTile(
                       icon: Icons.inventory_2,
                       title: 'Factory Order',
-                      subtitle: 'জার্সি অর্ডারের পাইকারি বিল (ফিক্সড রেট)',
+                      subtitle: 'Place wholesale order with fixed rates',
                       gradient: const [Color(0xFF7C3AED), Color(0xFF6D28D9)],
                       onTap: () => _openCreateBill(initialType: 'order'),
                     ),
@@ -510,7 +510,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: _buildActionTile(
                       icon: Icons.merge_type,
                       title: 'Combine Invoices',
-                      subtitle: 'একাধিক কাস্টমার বিল একত্র করে অর্ডার তৈরি',
+                      subtitle: 'Consolidate client orders for factory',
                       gradient: const [Color(0xFF0D9488), Color(0xFF0F766E)],
                       onTap: _openCombineInvoices,
                     ),
@@ -520,7 +520,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: _buildActionTile(
                       icon: Icons.admin_panel_settings,
                       title: 'Admin Panel',
-                      subtitle: 'ফ্যাব্রিক রেট ও আইটেম (PIN: 1234)',
+                      subtitle: 'Manage fabric catalog & rates (PIN: 1234)',
                       gradient: const [Color(0xFFEA580C), Color(0xFFC2410C)],
                       onTap: _openAdminPanel,
                     ),
@@ -560,7 +560,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Expanded(
                         flex: isWide ? 1 : 0,
                         child: StatCard(
-                          title: 'Total Due (বকেয়া)',
+                          title: 'Total Due Balance',
                           value: currency.format(_totalDue),
                           icon: Icons.money_off,
                           color: _totalDue > 0 ? AppTheme.danger : AppTheme.success,
@@ -959,7 +959,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final currency = NumberFormat.compactCurrency(symbol: '৳', decimalDigits: 0);
+    final currency = NumberFormat.compactCurrency(symbol: 'BDT ', decimalDigits: 0);
 
     return Scaffold(
       key: _scaffoldKey,
@@ -967,7 +967,7 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.menu, size: 26),
-          tooltip: 'Menu / Navigation (সকল অপশন)',
+          tooltip: 'Navigation Menu',
           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
         ),
         title: Row(

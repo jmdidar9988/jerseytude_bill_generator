@@ -24,7 +24,7 @@ class BillCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dateFormat = DateFormat('MMMM dd, yyyy');
-    final currency = NumberFormat.currency(symbol: '৳ ', decimalDigits: 0);
+    final currency = NumberFormat.currency(symbol: 'BDT ', decimalDigits: 0);
 
     Color statusColor;
     Color statusBg;

@@ -353,7 +353,7 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                     Icon(Icons.receipt_long, size: 18, color: isCustomer ? Colors.white : AppTheme.textSecondary),
                     const SizedBox(width: 8),
                     Text(
-                      'Customer Invoice (বিক্রয়)',
+                      'Customer Invoice',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
@@ -392,7 +392,7 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                     Icon(Icons.inventory_2_outlined, size: 18, color: !isCustomer ? Colors.white : AppTheme.textSecondary),
                     const SizedBox(width: 8),
                     Text(
-                      'Order Invoice (ক্রয় / সাপ্লায়ার)',
+                      'Order Invoice (Factory Purchase)',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
@@ -411,7 +411,7 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final currency = NumberFormat.currency(symbol: '৳', decimalDigits: 0);
+    final currency = NumberFormat.currency(symbol: 'BDT ', decimalDigits: 0);
     final dateFormat = DateFormat('MMMM dd, yyyy');
     final isCustomer = _invoiceType == 'customer';
 
@@ -793,7 +793,7 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                                   controller: _deliveryFeeController,
                                   keyboardType: TextInputType.number,
                                   decoration: const InputDecoration(
-                                    labelText: 'Delivery Charge (৳)',
+                                    labelText: 'Delivery Charge (BDT)',
                                     hintText: '0',
                                     prefixIcon: Icon(Icons.local_shipping_outlined, size: 18),
                                     isDense: true,
@@ -807,7 +807,7 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                                   controller: _discountController,
                                   keyboardType: TextInputType.number,
                                   decoration: const InputDecoration(
-                                    labelText: 'Special Discount (৳)',
+                                    labelText: 'Special Discount (BDT)',
                                     hintText: '0',
                                     prefixIcon: Icon(Icons.discount_outlined, size: 18),
                                     isDense: true,
@@ -882,10 +882,10 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                                             controller: _paidController,
                                             keyboardType: TextInputType.number,
                                             decoration: InputDecoration(
-                                              labelText: 'Paid Amount (পরিশোধিত টাকা)',
+                                              labelText: 'Paid Amount',
                                               hintText: 'e.g. 1500',
                                               prefixIcon: const Icon(Icons.payments_outlined, size: 18),
-                                              suffixText: '৳',
+                                              suffixText: 'BDT',
                                               isDense: true,
                                               filled: true,
                                               fillColor: Colors.white,
@@ -933,7 +933,7 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                                           crossAxisAlignment: CrossAxisAlignment.center,
                                           children: [
                                             Text(
-                                              _dueAmount > 0 ? 'DUE AMOUNT (বকেয়া)' : 'STATUS',
+                                              _dueAmount > 0 ? 'DUE BALANCE' : 'PAYMENT STATUS',
                                               style: TextStyle(
                                                 fontSize: 10,
                                                 fontWeight: FontWeight.w700,

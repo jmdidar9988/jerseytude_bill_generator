@@ -163,7 +163,7 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final currency = NumberFormat.currency(symbol: '৳ ', decimalDigits: 0);
+    final currency = NumberFormat.currency(symbol: 'BDT ', decimalDigits: 0);
 
     return Scaffold(
       appBar: AppBar(

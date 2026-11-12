@@ -135,7 +135,7 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
               ],
             ),
             Text(
-              '${_currentBill.customerName} • Total: ৳ ${_currentBill.grandTotal.toStringAsFixed(0)} (Due: ৳ ${_currentBill.dueAmount.toStringAsFixed(0)})',
+              '${_currentBill.customerName} • Total: BDT ${_currentBill.grandTotal.toStringAsFixed(0)} (Due: BDT ${_currentBill.dueAmount.toStringAsFixed(0)})',
               style: const TextStyle(fontSize: 11, color: Colors.white70),
             ),
           ],
