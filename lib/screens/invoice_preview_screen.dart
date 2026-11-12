@@ -79,6 +79,12 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
         ..invoiceNumber = newNumber
         ..items = convertedItems;
 
+      if (willBeOrder) {
+        // Customer payment to Jerseytude does not equal wholesale factory payment
+        updatedBill.paidAmount = 0.0;
+        updatedBill.paymentStatus = 'Pending';
+      }
+
       await FirestoreService.saveBill(updatedBill);
 
       if (mounted) {

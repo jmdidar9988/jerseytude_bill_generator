@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../models/bill.dart';
 import '../models/fabric_item.dart';
@@ -20,6 +21,9 @@ class CombineInvoicesScreen extends StatefulWidget {
 class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
   List<Bill> _allBills = [];
   final Set<String> _selectedBillIds = {};
+  final Map<String, TextEditingController> _supplierPaidControllers = {};
+  List<FabricItem> _fabrics = [];
+  Map<String, double> _billOrderCosts = {};
   bool _isLoading = true;
   String _searchQuery = '';
 
@@ -29,11 +33,63 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
     _loadBills();
   }
 
+  @override
+  void dispose() {
+    for (final controller in _supplierPaidControllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  TextEditingController _getOrCreateController(String billId) {
+    if (!_supplierPaidControllers.containsKey(billId)) {
+      final ctrl = TextEditingController(text: '0');
+      ctrl.addListener(() {
+        if (mounted) setState(() {});
+      });
+      _supplierPaidControllers[billId] = ctrl;
+    }
+    return _supplierPaidControllers[billId]!;
+  }
+
+  double _computeOrderCost(Bill bill, List<FabricItem> fabrics) {
+    double total = 0.0;
+    for (final item in bill.items) {
+      double orderUnitPrice = item.unitPrice;
+      final descLower = item.description.toLowerCase();
+      final isFullSleeve = descLower.contains('full sleeve') || descLower.contains('full');
+
+      for (final f in fabrics) {
+        if (descLower.contains(f.name.toLowerCase().trim())) {
+          orderUnitPrice = isFullSleeve ? f.fullSleeveOrderPrice : f.halfSleeveOrderPrice;
+          break;
+        }
+      }
+      total += orderUnitPrice * item.quantity;
+    }
+    return total;
+  }
+
   Future<void> _loadBills() async {
     setState(() => _isLoading = true);
-    final bills = await FirestoreService.getAllBills();
+    final results = await Future.wait([
+      FirestoreService.getAllBills(),
+      FabricService.getAllFabrics(),
+    ]);
+
+    final bills = results[0] as List<Bill>;
+    final fabrics = results[1] as List<FabricItem>;
+    _fabrics = fabrics;
+
+    final customerBills = bills.where((b) => b.isCustomerInvoice).toList();
+    final Map<String, double> costs = {};
+    for (final b in customerBills) {
+      costs[b.id] = _computeOrderCost(b, fabrics);
+    }
+
     setState(() {
-      _allBills = bills.where((b) => b.isCustomerInvoice).toList();
+      _allBills = customerBills;
+      _billOrderCosts = costs;
       _isLoading = false;
     });
   }
@@ -55,12 +111,29 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
   int get _totalSelectedPieces =>
       _selectedBills.fold(0, (sum, b) => sum + b.totalQuantity);
 
-  double get _totalSelectedAmount =>
-      _selectedBills.fold(0.0, (sum, b) => sum + b.grandTotal);
+  double get _totalFactoryCost =>
+      _selectedBills.fold(0.0, (sum, b) => sum + (_billOrderCosts[b.id] ?? 0.0));
+
+  double get _totalSupplierPaid {
+    double sum = 0.0;
+    for (final b in _selectedBills) {
+      final ctrl = _supplierPaidControllers[b.id];
+      if (ctrl != null) {
+        final val = double.tryParse(ctrl.text.trim()) ?? 0.0;
+        sum += val;
+      }
+    }
+    return sum;
+  }
+
+  double get _totalSupplierDue => (_totalFactoryCost - _totalSupplierPaid).clamp(0.0, double.infinity);
 
   void _selectAll() {
     setState(() {
-      _selectedBillIds.addAll(_filteredBills.map((b) => b.id));
+      for (final b in _filteredBills) {
+        _selectedBillIds.add(b.id);
+        _getOrCreateController(b.id);
+      }
     });
   }
 
@@ -82,35 +155,32 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
       return;
     }
 
-    // Load fabric catalog for factory wholesale pricing
-    final fabrics = await FabricService.getAllFabrics();
-    final Map<String, FabricItem> fabricMap = {};
-    for (final f in fabrics) {
-      fabricMap[f.name.toLowerCase().trim()] = f;
-    }
-
     final List<OrderItem> combinedItems = [];
     final List<String> clientNames = [];
+    final List<String> paymentBreakdownNotes = [];
+    double totalCombinedCost = 0.0;
+    double totalCombinedPaid = 0.0;
 
     for (final b in selected) {
       if (!clientNames.contains(b.customerName)) {
         clientNames.add(b.customerName);
       }
 
+      double singleBillFactoryCost = 0.0;
       for (final item in b.items) {
         double orderUnitPrice = item.unitPrice;
-
-        // Try to match fabric in catalog to get manufacturer fixed price
         final descLower = item.description.toLowerCase();
         final isFullSleeve = descLower.contains('full sleeve') || descLower.contains('full');
 
-        for (final entry in fabricMap.entries) {
-          if (descLower.contains(entry.key)) {
-            final f = entry.value;
+        for (final f in _fabrics) {
+          if (descLower.contains(f.name.toLowerCase().trim())) {
             orderUnitPrice = isFullSleeve ? f.fullSleeveOrderPrice : f.halfSleeveOrderPrice;
             break;
           }
         }
+
+        final itemTotal = orderUnitPrice * item.quantity;
+        singleBillFactoryCost += itemTotal;
 
         combinedItems.add(
           OrderItem(
@@ -121,22 +191,41 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
           ),
         );
       }
+
+      totalCombinedCost += singleBillFactoryCost;
+      final paidForBill = double.tryParse(_supplierPaidControllers[b.id]?.text.trim() ?? '') ?? 0.0;
+      totalCombinedPaid += paidForBill;
+      final dueForBill = (singleBillFactoryCost - paidForBill).clamp(0.0, double.infinity);
+
+      paymentBreakdownNotes.add(
+        '• ${b.customerName} (${b.invoiceNumber}): Cost BDT ${singleBillFactoryCost.toStringAsFixed(0)} | Factory Paid BDT ${paidForBill.toStringAsFixed(0)} | Due BDT ${dueForBill.toStringAsFixed(0)}',
+      );
     }
 
     final nextNo = await FirestoreService.getNextInvoiceNumber();
     final orderInvoiceNo = nextNo.replaceFirst('JT-', 'JT-ORD-');
 
+    final String finalPaymentStatus = (totalCombinedPaid >= totalCombinedCost && totalCombinedCost > 0)
+        ? 'Paid'
+        : (totalCombinedPaid > 0 ? 'Partial' : 'Pending');
+
+    final String notes = 'Combined Factory Order Breakdown (${selected.length} Customer Orders):\n'
+        '${paymentBreakdownNotes.join('\n')}\n\n'
+        'Total Factory Cost: BDT ${totalCombinedCost.toStringAsFixed(0)} | Total Paid: BDT ${totalCombinedPaid.toStringAsFixed(0)} | Balance Due: BDT ${(_totalSupplierDue).toStringAsFixed(0)}';
+
     final combinedOrderBill = Bill(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       invoiceNumber: orderInvoiceNo,
       date: DateTime.now(),
-      paymentStatus: 'Pending',
+      paymentStatus: finalPaymentStatus,
       invoiceType: 'order',
       customerName: 'Factory / Supplier Order (${selected.length} Clients)',
       customerAddress: 'Jersey Manufacturing Factory',
       customerPhone: '+880 1319-923519',
       project: 'Combined Order: ${clientNames.join(", ")}',
       items: combinedItems,
+      paidAmount: totalCombinedPaid,
+      notes: notes,
     );
 
     if (!mounted) return;
@@ -196,36 +285,74 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
           ],
         ),
         child: SafeArea(
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Selected: ${_selectedBillIds.length} Invoices ($_totalSelectedPieces pcs)',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              if (_selectedBillIds.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _StatMiniCard(
+                          label: 'Factory Total',
+                          value: currency.format(_totalFactoryCost),
+                          color: Colors.purple,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _StatMiniCard(
+                          label: 'Total Paid',
+                          value: currency.format(_totalSupplierPaid),
+                          color: AppTheme.success,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _StatMiniCard(
+                          label: 'Supplier Due',
+                          value: currency.format(_totalSupplierDue),
+                          color: _totalSupplierDue > 0 ? AppTheme.warning : AppTheme.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Selected: ${_selectedBillIds.length} Invoices ($_totalSelectedPieces pcs)',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        Text(
+                          _selectedBillIds.isEmpty
+                              ? 'Select customer orders above to combine'
+                              : 'Total Paid: ${currency.format(_totalSupplierPaid)} | Due: ${currency.format(_totalSupplierDue)}',
+                          style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                        ),
+                      ],
                     ),
-                    Text(
-                      'Customer Total: ${currency.format(_totalSelectedAmount)}',
-                      style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                  ),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.purple,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                     ),
-                  ],
-                ),
-              ),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.purple,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                ),
-                icon: const Icon(Icons.playlist_add_check, size: 20),
-                label: const Text(
-                  'Generate Order Invoice',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                ),
-                onPressed: _selectedBillIds.isEmpty ? null : _createCombinedOrderInvoice,
+                    icon: const Icon(Icons.playlist_add_check, size: 20),
+                    label: const Text(
+                      'Generate Order Invoice',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    onPressed: _selectedBillIds.isEmpty ? null : _createCombinedOrderInvoice,
+                  ),
+                ],
               ),
             ],
           ),
@@ -239,13 +366,13 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
                 Container(
                   color: Colors.purple.shade50,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Row(
+                  child: const Row(
                     children: [
-                      const Icon(Icons.info_outline, color: Colors.purple, size: 20),
-                      const SizedBox(width: 10),
-                      const Expanded(
+                      Icon(Icons.info_outline, color: Colors.purple, size: 20),
+                      SizedBox(width: 10),
+                      Expanded(
                         child: Text(
-                          'Select customer orders to consolidate into a single manufacturer Order Invoice with factory wholesale rates.',
+                          'Select customer invoices to combine. Enter supplier paid amounts separately for each order to calculate final factory payment and due balance.',
                           style: TextStyle(fontSize: 12, color: Colors.purple),
                         ),
                       ),
@@ -283,10 +410,14 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
                       : ListView.separated(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           itemCount: _filteredBills.length,
-                          separatorBuilder: (_, _) => const SizedBox(height: 8),
+                          separatorBuilder: (_, _) => const SizedBox(height: 10),
                           itemBuilder: (context, index) {
                             final bill = _filteredBills[index];
                             final isSelected = _selectedBillIds.contains(bill.id);
+                            final factoryCost = _billOrderCosts[bill.id] ?? 0.0;
+                            final controller = _getOrCreateController(bill.id);
+                            final currentPaid = double.tryParse(controller.text.trim()) ?? 0.0;
+                            final currentDue = (factoryCost - currentPaid).clamp(0.0, double.infinity);
 
                             return Card(
                               elevation: isSelected ? 2 : 0,
@@ -297,86 +428,206 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
                                   width: isSelected ? 1.8 : 1.0,
                                 ),
                               ),
-                              child: CheckboxListTile(
-                                value: isSelected,
-                                activeColor: Colors.purple,
-                                onChanged: (val) {
-                                  setState(() {
-                                    if (val == true) {
-                                      _selectedBillIds.add(bill.id);
-                                    } else {
-                                      _selectedBillIds.remove(bill.id);
-                                    }
-                                  });
-                                },
-                                title: Row(
-                                  children: [
-                                    Text(
-                                      bill.invoiceNumber,
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.accentLight,
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        '${bill.totalQuantity} pcs',
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w700,
-                                          color: AppTheme.accent,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                subtitle: Column(
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      '${bill.customerName} • ${bill.customerAddress} • ${bill.customerPhone}',
-                                      style: const TextStyle(fontSize: 11.5),
+                                    // Header Row with Checkbox
+                                    Row(
+                                      children: [
+                                        Checkbox(
+                                          value: isSelected,
+                                          activeColor: Colors.purple,
+                                          onChanged: (val) {
+                                            setState(() {
+                                              if (val == true) {
+                                                _selectedBillIds.add(bill.id);
+                                                _getOrCreateController(bill.id);
+                                              } else {
+                                                _selectedBillIds.remove(bill.id);
+                                              }
+                                            });
+                                          },
+                                        ),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                children: [
+                                                  Text(
+                                                    bill.invoiceNumber,
+                                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                                  ),
+                                                  const SizedBox(width: 8),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: AppTheme.accentLight,
+                                                      borderRadius: BorderRadius.circular(4),
+                                                    ),
+                                                    child: Text(
+                                                      '${bill.totalQuantity} pcs',
+                                                      style: const TextStyle(
+                                                        fontSize: 10,
+                                                        fontWeight: FontWeight.w700,
+                                                        color: AppTheme.accent,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                '${bill.customerName} • ${bill.customerPhone}',
+                                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.end,
+                                          children: [
+                                            Text(
+                                              currency.format(factoryCost),
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 14,
+                                                color: Colors.purple,
+                                              ),
+                                            ),
+                                            const Text(
+                                              'Factory Wholesale Cost',
+                                              style: TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
                                     ),
-                                    if (bill.project.isNotEmpty)
-                                      Text(
-                                        'Project: ${bill.project}',
-                                        style: const TextStyle(fontSize: 10.5, color: AppTheme.textSecondary),
+
+                                    // Items details
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 48, top: 4, bottom: 4),
+                                      child: Text(
+                                        bill.items.map((i) => '${i.quantity}x ${i.description}').join(' • '),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                                       ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      bill.items.map((i) => '${i.quantity}x ${i.description}').join(' | '),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(fontSize: 10.5, color: Colors.grey.shade600),
                                     ),
-                                  ],
-                                ),
-                                secondary: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Text(
-                                      currency.format(bill.grandTotal),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 14,
-                                        color: AppTheme.primary,
+
+                                    // Per-Invoice Paid Input Section (Visible when selected)
+                                    if (isSelected) ...[
+                                      const Divider(height: 16),
+                                      Container(
+                                        padding: const EdgeInsets.all(10),
+                                        decoration: BoxDecoration(
+                                          color: Colors.purple.shade50.withValues(alpha: 0.5),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(color: Colors.purple.shade200),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const Row(
+                                              children: [
+                                                Icon(Icons.payment, size: 16, color: Colors.purple),
+                                                SizedBox(width: 6),
+                                                Text(
+                                                  'Paid to Factory for this Order:',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 12,
+                                                    color: Colors.purple,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: SizedBox(
+                                                    height: 38,
+                                                    child: TextField(
+                                                      controller: controller,
+                                                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                                      inputFormatters: [
+                                                        FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                                                      ],
+                                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                                      decoration: InputDecoration(
+                                                        isDense: true,
+                                                        prefixText: 'BDT ',
+                                                        prefixStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                                        hintText: '0',
+                                                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                                                        fillColor: Colors.white,
+                                                        filled: true,
+                                                      ),
+                                                      onChanged: (_) => setState(() {}),
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                // Quick action: Set 0
+                                                OutlinedButton(
+                                                  style: OutlinedButton.styleFrom(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                                    minimumSize: const Size(40, 38),
+                                                    side: BorderSide(color: Colors.grey.shade400),
+                                                  ),
+                                                  onPressed: () {
+                                                    controller.text = '0';
+                                                    setState(() {});
+                                                  },
+                                                  child: const Text('0', style: TextStyle(fontSize: 12)),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                // Quick action: Full Payment
+                                                ElevatedButton(
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor: Colors.purple,
+                                                    foregroundColor: Colors.white,
+                                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                                    minimumSize: const Size(50, 38),
+                                                  ),
+                                                  onPressed: () {
+                                                    controller.text = factoryCost.toStringAsFixed(0);
+                                                    setState(() {});
+                                                  },
+                                                  child: const Text('Full', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Text(
+                                                  'Paid: ${currency.format(currentPaid)}',
+                                                  style: const TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: AppTheme.success,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  'Due: ${currency.format(currentDue)}',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: currentDue > 0 ? AppTheme.warning : AppTheme.success,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                    Text(
-                                      bill.paymentStatus,
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                        color: bill.paymentStatus.toLowerCase() == 'paid'
-                                            ? AppTheme.success
-                                            : AppTheme.warning,
-                                      ),
-                                    ),
+                                    ],
                                   ],
                                 ),
                               ),
@@ -390,3 +641,43 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
   }
 }
 
+class _StatMiniCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _StatMiniCard({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(fontSize: 9.5, color: Colors.grey.shade700, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 1),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
