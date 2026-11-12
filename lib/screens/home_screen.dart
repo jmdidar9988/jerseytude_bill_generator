@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/bill.dart';
 import '../services/firestore_service.dart';
+import '../services/fabric_service.dart';
 import '../services/pdf_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/bill_card.dart';
@@ -144,9 +145,13 @@ class _HomeScreenState extends State<HomeScreen> {
       newNo = newNo.replaceFirst('JT-ORD-', 'JT-');
     }
 
+    // Auto-update item prices to Admin Panel pricing
+    final convertedItems = await FabricService.convertItemPricesForType(bill.items, newType);
+
     final updatedBill = Bill.fromMap(bill.toMap())
       ..invoiceType = newType
-      ..invoiceNumber = newNo;
+      ..invoiceNumber = newNo
+      ..items = convertedItems;
 
     await FirestoreService.saveBill(updatedBill);
     await _loadBills();
@@ -155,7 +160,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Converted to ${willBeOrder ? "Order Invoice" : "Customer Invoice"} ($newNo)!',
+            'Converted to ${willBeOrder ? "Order Invoice (Fixed Catalog Price applied)" : "Customer Invoice"} ($newNo)!',
           ),
           backgroundColor: AppTheme.success,
         ),
@@ -307,7 +312,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ListTile(
                   leading: const Icon(Icons.add_shopping_cart, color: AppTheme.accent),
                   title: const Text('New Customer Invoice'),
-                  subtitle: const Text('Sales, client details & payments', style: TextStyle(fontSize: 11)),
                   onTap: () {
                     Navigator.pop(context);
                     _openCreateBill(initialType: 'customer');
@@ -316,7 +320,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ListTile(
                   leading: const Icon(Icons.inventory_2_outlined, color: Colors.purple),
                   title: const Text('New Order Invoice'),
-                  subtitle: const Text('Wholesale factory purchase with fixed rates', style: TextStyle(fontSize: 11)),
                   onTap: () {
                     Navigator.pop(context);
                     _openCreateBill(initialType: 'order');
@@ -325,7 +328,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ListTile(
                   leading: const Icon(Icons.merge_type, color: Colors.indigo),
                   title: const Text('Combine Invoices into Order'),
-                  subtitle: const Text('Consolidate multiple orders for manufacturing', style: TextStyle(fontSize: 11)),
                   onTap: () {
                     Navigator.pop(context);
                     _openCombineInvoices();
@@ -339,7 +341,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ListTile(
                   leading: const Icon(Icons.admin_panel_settings_outlined, color: Color(0xFFD97706)),
                   title: const Text('Admin Panel (PIN: 1234)'),
-                  subtitle: const Text('Fabric pricing & inventory management', style: TextStyle(fontSize: 11)),
                   onTap: () {
                     Navigator.pop(context);
                     _openAdminPanel();
@@ -348,7 +349,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ListTile(
                   leading: const Icon(Icons.analytics_outlined, color: Color(0xFF0284C7)),
                   title: const Text('Business Analytics'),
-                  subtitle: const Text('Monthly breakdown, profits & metrics', style: TextStyle(fontSize: 11)),
                   onTap: () {
                     Navigator.pop(context);
                     _openAnalytics();
@@ -479,14 +479,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
               const SizedBox(height: 20),
 
-              // Quick Actions Grid (Main Hub Buttons)
+              // Quick Actions Grid (Clean, Smart, No Subtitles)
               Row(
                 children: [
                   Expanded(
                     child: _buildActionTile(
                       icon: Icons.receipt_long,
                       title: 'Customer Invoice',
-                      subtitle: 'Generate client bill & collect payment',
                       gradient: const [Color(0xFF0284C7), Color(0xFF0369A1)],
                       onTap: () => _openCreateBill(initialType: 'customer'),
                     ),
@@ -496,7 +495,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: _buildActionTile(
                       icon: Icons.inventory_2,
                       title: 'Factory Order',
-                      subtitle: 'Place wholesale order with fixed rates',
                       gradient: const [Color(0xFF7C3AED), Color(0xFF6D28D9)],
                       onTap: () => _openCreateBill(initialType: 'order'),
                     ),
@@ -510,7 +508,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: _buildActionTile(
                       icon: Icons.merge_type,
                       title: 'Combine Invoices',
-                      subtitle: 'Consolidate client orders for factory',
                       gradient: const [Color(0xFF0D9488), Color(0xFF0F766E)],
                       onTap: _openCombineInvoices,
                     ),
@@ -518,11 +515,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: _buildActionTile(
-                      icon: Icons.admin_panel_settings,
-                      title: 'Admin Panel',
-                      subtitle: 'Manage fabric catalog & rates (PIN: 1234)',
-                      gradient: const [Color(0xFFEA580C), Color(0xFFC2410C)],
-                      onTap: _openAdminPanel,
+                      icon: Icons.receipt_long_outlined,
+                      title: 'Invoices Directory',
+                      gradient: const [Color(0xFF334155), Color(0xFF1E293B)],
+                      onTap: () => setState(() => _currentView = 1),
                     ),
                   ),
                 ],
@@ -692,7 +688,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildActionTile({
     required IconData icon,
     required String title,
-    required String subtitle,
     required List<Color> gradient,
     required VoidCallback onTap,
   }) {
@@ -700,7 +695,7 @@ class _HomeScreenState extends State<HomeScreen> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
         decoration: BoxDecoration(
           gradient: LinearGradient(colors: gradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
           borderRadius: BorderRadius.circular(12),
@@ -720,29 +715,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, color: Colors.white, size: 24),
+              child: Icon(icon, color: Colors.white, size: 22),
             ),
             const SizedBox(width: 14),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(color: Colors.white70, fontSize: 11),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14.5,
+                ),
               ),
             ),
             const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 14),
@@ -997,11 +980,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.admin_panel_settings),
-            tooltip: 'Admin Panel (Fabrics & Pricing)',
-            onPressed: _openAdminPanel,
-          ),
           IconButton(
             icon: const Icon(Icons.analytics_outlined),
             tooltip: 'Business Analytics',

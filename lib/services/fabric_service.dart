@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/fabric_item.dart';
+import '../models/order_item.dart';
 
 class FabricService {
   static const String fabricsBoxName = 'jerseytude_fabrics_box';
@@ -159,6 +160,42 @@ class FabricService {
       final box = Hive.box(settingsBoxName);
       await box.put('admin_pin', newPassword.trim());
     } catch (_) {}
+  }
+
+  // ── Auto-adjust prices between Customer & Order Invoices ────
+  static Future<List<OrderItem>> convertItemPricesForType(
+    List<OrderItem> items,
+    String targetType,
+  ) async {
+    final fabrics = await getAllFabrics();
+    final isTargetOrder = targetType.toLowerCase() == 'order';
+
+    return items.map((item) {
+      final descLower = item.description.toLowerCase();
+      final isFull = descLower.contains('full sleeve') || descLower.contains('full');
+
+      FabricItem? matched;
+      for (final f in fabrics) {
+        if (descLower.contains(f.name.toLowerCase().trim())) {
+          matched = f;
+          break;
+        }
+      }
+
+      if (matched != null) {
+        final newPrice = isTargetOrder
+            ? (isFull ? matched.fullSleeveOrderPrice : matched.halfSleeveOrderPrice)
+            : (isFull ? matched.defaultCustomerFullPrice : matched.defaultCustomerHalfPrice);
+
+        return OrderItem(
+          id: item.id,
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: newPrice,
+        );
+      }
+      return item;
+    }).toList();
   }
 }
 

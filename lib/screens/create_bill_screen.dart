@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/bill.dart';
 import '../models/order_item.dart';
+import '../services/fabric_service.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/number_to_words.dart';
@@ -329,9 +330,11 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
         children: [
           Expanded(
             child: InkWell(
-              onTap: () {
+              onTap: () async {
+                final updatedItems = await FabricService.convertItemPricesForType(_items, 'customer');
                 setState(() {
                   _invoiceType = 'customer';
+                  _items = updatedItems;
                   if (_invoiceNoController.text.startsWith('JT-ORD-')) {
                     _invoiceNoController.text = _invoiceNoController.text.replaceFirst('JT-ORD-', 'JT-');
                   }
@@ -368,9 +371,11 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
           const SizedBox(width: 6),
           Expanded(
             child: InkWell(
-              onTap: () {
+              onTap: () async {
+                final updatedItems = await FabricService.convertItemPricesForType(_items, 'order');
                 setState(() {
                   _invoiceType = 'order';
+                  _items = updatedItems;
                   if (_invoiceNoController.text.startsWith('JT-') && !_invoiceNoController.text.startsWith('JT-ORD-')) {
                     _invoiceNoController.text = _invoiceNoController.text.replaceFirst('JT-', 'JT-ORD-');
                   }

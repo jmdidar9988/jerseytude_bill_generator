@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 import '../models/bill.dart';
+import '../services/fabric_service.dart';
 import '../services/firestore_service.dart';
 import '../services/pdf_service.dart';
 import '../theme/app_theme.dart';
@@ -71,9 +72,12 @@ class _InvoicePreviewScreenState extends State<InvoicePreviewScreen> {
         newNumber = newNumber.replaceFirst('JT-ORD-', 'JT-');
       }
 
+      final convertedItems = await FabricService.convertItemPricesForType(_currentBill.items, newType);
+
       final updatedBill = Bill.fromMap(_currentBill.toMap())
         ..invoiceType = newType
-        ..invoiceNumber = newNumber;
+        ..invoiceNumber = newNumber
+        ..items = convertedItems;
 
       await FirestoreService.saveBill(updatedBill);
 
