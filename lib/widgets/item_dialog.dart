@@ -191,6 +191,27 @@ class _ItemDialogState extends State<ItemDialog> {
                 const SizedBox(height: 6),
                 if (_isLoadingFabrics)
                   const LinearProgressIndicator()
+                else if (_availableFabrics.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFFCA5A5)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 20),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'No fabrics available. Please add fabrics in Admin Panel first.',
+                            style: TextStyle(color: Color(0xFFDC2626), fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
                 else
                   DropdownButtonFormField<FabricItem>(
                     initialValue: _selectedFabric,
@@ -311,16 +332,41 @@ class _ItemDialogState extends State<ItemDialog> {
 
                 const SizedBox(height: 14),
 
-                // 3. Item Description
-                const Text('3. Description / Item Title *', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                // 3. Item Title (Strictly Locked from Admin Catalog)
+                const Row(
+                  children: [
+                    Text('3. Jersey Item Title', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                    SizedBox(width: 6),
+                    Text('(Admin Catalog Locked)', style: TextStyle(fontSize: 10, color: AppTheme.textSecondary, fontWeight: FontWeight.bold)),
+                  ],
+                ),
                 const SizedBox(height: 6),
-                TextFormField(
-                  controller: _descController,
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.edit_note, size: 20),
-                    hintText: 'e.g. Leaf Jacquard Polo Half Sleeve Jersey',
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.border),
                   ),
-                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                  child: Row(
+                    children: [
+                      const Icon(Icons.lock_outline, size: 16, color: AppTheme.textSecondary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _selectedFabric != null
+                              ? '${_selectedFabric!.name} $_sleeveType Jersey'
+                              : 'Select a fabric from catalog above',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
 
                 const SizedBox(height: 14),
@@ -454,16 +500,18 @@ class _ItemDialogState extends State<ItemDialog> {
                       style: _isOrderInvoice
                           ? ElevatedButton.styleFrom(backgroundColor: Colors.purple)
                           : null,
-                      onPressed: () {
-                        if (_formKey.currentState?.validate() != true) return;
-                        final item = OrderItem(
-                          id: widget.existingItem?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-                          description: _descController.text.trim(),
-                          quantity: _quantity,
-                          unitPrice: _unitPrice,
-                        );
-                        Navigator.of(context).pop(item);
-                      },
+                      onPressed: _selectedFabric == null
+                          ? null
+                          : () {
+                              if (_formKey.currentState?.validate() != true) return;
+                              final item = OrderItem(
+                                id: widget.existingItem?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+                                description: '${_selectedFabric!.name} $_sleeveType Jersey',
+                                quantity: _quantity,
+                                unitPrice: _unitPrice,
+                              );
+                              Navigator.of(context).pop(item);
+                            },
                       child: Text(widget.existingItem == null ? 'Add Item' : 'Update Item'),
                     ),
                   ],
