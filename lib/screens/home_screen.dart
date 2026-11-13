@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/bill.dart';
+import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../services/fabric_service.dart';
 import '../services/pdf_service.dart';
@@ -379,6 +380,17 @@ class _HomeScreenState extends State<HomeScreen> {
                   onTap: () {
                     Navigator.pop(context);
                     _restoreDemoBill();
+                  },
+                ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.logout, color: AppTheme.danger),
+                  title: const Text('Sign Out / Logout', style: TextStyle(color: AppTheme.danger, fontWeight: FontWeight.w600)),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await AuthService.logout();
+                    if (!mounted) return;
+                    Navigator.of(context).pushNamedAndRemoveUntil('/login', (r) => false);
                   },
                 ),
               ],
@@ -1008,6 +1020,32 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
             onPressed: _loadBills,
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Sign Out',
+            onPressed: () async {
+              final nav = Navigator.of(context);
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Sign Out'),
+                  content: const Text('Are you sure you want to log out of Jerseytude?'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger),
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('Sign Out'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirm == true) {
+                await AuthService.logout();
+                nav.pushNamedAndRemoveUntil('/login', (r) => false);
+              }
+            },
           ),
         ],
       ),
