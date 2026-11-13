@@ -150,7 +150,7 @@ flutter analyze
 
 ## 🔒 Security & Admin Access
 
-- **Default Admin PIN:** `1234`
+- **Default Admin PIN:** ``
 - The PIN can be updated at any time directly through the **Admin Panel** (`Icons.password`).
 - Sessions remain securely unlocked in local storage during active browser sessions, but can be locked immediately via the **Logout** button.
 
