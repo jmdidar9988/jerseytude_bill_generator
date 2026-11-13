@@ -28,7 +28,7 @@ Built with **Flutter**, **Firebase Cloud Firestore**, and **Hive**, the applicat
   - Overall combined totals: Total Pieces, Grand Factory Cost, Total Paid, and Net Balance Due.
 
 ### 3. Protected Admin Panel & Fabric Inventory Catalog
-- **PIN-Protected Access** (Default PIN: `1234`, customizable inside the panel).
+- **PIN-Protected Access** (Default PIN: , customizable inside the panel).
 - **Fabric Catalog Management:**
   - Configure fixed order purchase prices (Half Sleeve, Full Sleeve).
   - Configure suggested retail customer selling prices.
