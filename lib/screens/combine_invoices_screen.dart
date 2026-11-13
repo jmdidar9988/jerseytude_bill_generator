@@ -158,6 +158,7 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
     final List<OrderItem> combinedItems = [];
     final List<String> clientNames = [];
     final List<String> paymentBreakdownNotes = [];
+    final List<ClientOrderGroup> clientGroups = [];
     double totalCombinedCost = 0.0;
     double totalCombinedPaid = 0.0;
 
@@ -167,6 +168,8 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
       }
 
       double singleBillFactoryCost = 0.0;
+      final List<OrderItem> billOrderItems = [];
+
       for (final item in b.items) {
         double orderUnitPrice = item.unitPrice;
         final descLower = item.description.toLowerCase();
@@ -182,14 +185,14 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
         final itemTotal = orderUnitPrice * item.quantity;
         singleBillFactoryCost += itemTotal;
 
-        combinedItems.add(
-          OrderItem(
-            id: 'ord-${b.id}-${item.id}',
-            description: '[${b.customerName}] ${item.description}',
-            quantity: item.quantity,
-            unitPrice: orderUnitPrice,
-          ),
+        final ordItem = OrderItem(
+          id: 'ord-${b.id}-${item.id}',
+          description: '[${b.customerName} (${b.invoiceNumber})] ${item.description}',
+          quantity: item.quantity,
+          unitPrice: orderUnitPrice,
         );
+        combinedItems.add(ordItem);
+        billOrderItems.add(ordItem);
       }
 
       totalCombinedCost += singleBillFactoryCost;
@@ -197,8 +200,21 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
       totalCombinedPaid += paidForBill;
       final dueForBill = (singleBillFactoryCost - paidForBill).clamp(0.0, double.infinity);
 
+      clientGroups.add(
+        ClientOrderGroup(
+          clientId: b.id,
+          clientName: b.customerName,
+          invoiceNumber: b.invoiceNumber,
+          project: b.project,
+          items: billOrderItems,
+          jerseyPrice: singleBillFactoryCost,
+          paidAmount: paidForBill,
+        ),
+      );
+
+      final projectText = b.project.trim().isNotEmpty ? ' • ${b.project.trim()}' : '';
       paymentBreakdownNotes.add(
-        '• ${b.customerName} (${b.invoiceNumber}): Cost BDT ${singleBillFactoryCost.toStringAsFixed(0)} | Factory Paid BDT ${paidForBill.toStringAsFixed(0)} | Due BDT ${dueForBill.toStringAsFixed(0)}',
+        '• ${b.customerName} (${b.invoiceNumber}$projectText): Cost BDT ${singleBillFactoryCost.toStringAsFixed(0)} | Factory Paid BDT ${paidForBill.toStringAsFixed(0)} | Due BDT ${dueForBill.toStringAsFixed(0)}',
       );
     }
 
@@ -226,6 +242,7 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
       items: combinedItems,
       paidAmount: totalCombinedPaid,
       notes: notes,
+      clientGroups: clientGroups,
     );
 
     if (!mounted) return;

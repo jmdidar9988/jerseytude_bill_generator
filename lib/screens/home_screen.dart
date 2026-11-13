@@ -38,6 +38,19 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadBills();
+    _checkActiveRouteOnReload();
+  }
+
+  void _checkActiveRouteOnReload() {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final active = await FabricService.getActiveScreen();
+      final isUnlocked = await FabricService.isAdminSessionUnlocked();
+      if (active == 'admin' && isUnlocked && mounted) {
+        Navigator.of(context).pushNamed('/admin').then((_) {
+          FabricService.setActiveScreen('home');
+        });
+      }
+    });
   }
 
   @override

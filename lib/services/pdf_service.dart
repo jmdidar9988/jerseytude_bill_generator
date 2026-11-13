@@ -338,186 +338,396 @@ class PdfInvoiceService {
           pw.SizedBox(height: 12),
 
           // ── 3. ORDER DETAILS TABLE ──────────────────────────────
-          pw.Table(
-            border: const pw.TableBorder(
-              bottom: pw.BorderSide(color: borderColor, width: 0.8),
-            ),
-            columnWidths: {
-              0: const pw.FlexColumnWidth(4.6), // Description
-              1: const pw.FlexColumnWidth(1.2), // Quantity
-              2: const pw.FlexColumnWidth(1.8), // Rate
-              3: const pw.FlexColumnWidth(2.0), // Total
-            },
-            children: [
-              // Dark Corporate Header Bar
-              pw.TableRow(
-                decoration: const pw.BoxDecoration(
-                  color: tableHeaderBg,
+          if (bill.isOrderInvoice && bill.getClientOrderGroups().isNotEmpty) ...[
+            // Order Invoice Client-by-Client Breakdown View
+            ...bill.getClientOrderGroups().map((group) {
+              return pw.Container(
+                margin: const pw.EdgeInsets.only(bottom: 10),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: borderColor, width: 0.8),
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
                 ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                  children: [
+                    // Client Header Banner
+                    pw.Container(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      color: primaryNavy,
+                      child: pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Expanded(
+                            child: pw.Column(
+                              crossAxisAlignment: pw.CrossAxisAlignment.start,
+                              children: [
+                                pw.Text(
+                                  group.invoiceNumber.isNotEmpty
+                                      ? 'CLIENT ORDER: ${group.clientName.toUpperCase()} (${group.invoiceNumber})'
+                                      : 'CLIENT ORDER: ${group.clientName.toUpperCase()}',
+                                  style: pw.TextStyle(color: PdfColors.white, fontSize: 8.5, font: fontBold, letterSpacing: 0.5),
+                                ),
+                                if (group.project.isNotEmpty) ...[
+                                  pw.SizedBox(height: 1.5),
+                                  pw.Text(
+                                    'Project: ${group.project}',
+                                    style: const pw.TextStyle(color: PdfColor.fromInt(0xFFE2E8F0), fontSize: 7.5),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          pw.Text(
+                            '${group.items.fold(0, (s, i) => s + i.quantity)} pcs',
+                            style: const pw.TextStyle(color: PdfColors.white, fontSize: 8),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Items Table for Client
+                    pw.Table(
+                      columnWidths: {
+                        0: const pw.FlexColumnWidth(4.6),
+                        1: const pw.FlexColumnWidth(1.2),
+                        2: const pw.FlexColumnWidth(1.8),
+                        3: const pw.FlexColumnWidth(2.0),
+                      },
+                      children: [
+                        ...group.items.asMap().entries.map((entry) {
+                          final idx = entry.key;
+                          final item = entry.value;
+                          final cleanDesc = item.description.replaceFirst(RegExp(r'^\[.*?\]\s*'), '');
+                          final isZebra = idx % 2 == 1;
+                          return pw.TableRow(
+                            decoration: pw.BoxDecoration(
+                              color: isZebra ? zebraBg : PdfColors.white,
+                              border: const pw.Border(bottom: pw.BorderSide(color: borderColor, width: 0.5)),
+                            ),
+                            children: [
+                              pw.Padding(
+                                padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+                                child: pw.Text(
+                                  cleanDesc.isEmpty ? item.description : cleanDesc,
+                                  style: pw.TextStyle(fontSize: 8.5, font: fontMedium, color: textDark),
+                                ),
+                              ),
+                              pw.Padding(
+                                padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+                                child: pw.Text(
+                                  '${item.quantity}',
+                                  textAlign: pw.TextAlign.center,
+                                  style: const pw.TextStyle(fontSize: 8.5, color: textBody),
+                                ),
+                              ),
+                              pw.Padding(
+                                padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+                                child: pw.Text(
+                                  currencyFormat.format(item.unitPrice),
+                                  textAlign: pw.TextAlign.right,
+                                  style: const pw.TextStyle(fontSize: 8.5, color: textBody),
+                                ),
+                              ),
+                              pw.Padding(
+                                padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+                                child: pw.Text(
+                                  currencyFormat.format(item.totalPrice),
+                                  textAlign: pw.TextAlign.right,
+                                  style: pw.TextStyle(fontSize: 8.5, font: fontBold, color: textDark),
+                                ),
+                              ),
+                            ],
+                          );
+                        }),
+                      ],
+                    ),
+                    // Client Jersey Price, Paid, Due Sub-summary
+                    pw.Container(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      color: cardBg,
+                      child: pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Row(
+                            children: [
+                              pw.Text('${group.displayTitle} Jersey Price: ', style: pw.TextStyle(fontSize: 8.5, font: fontBold, color: primaryDark)),
+                              pw.Text(currencyFormat.format(group.jerseyPrice), style: pw.TextStyle(fontSize: 8.5, font: fontBold, color: primaryDark)),
+                            ],
+                          ),
+                          pw.Row(
+                            children: [
+                              pw.Text('Paid: ', style: pw.TextStyle(fontSize: 8.5, font: fontBold, color: const PdfColor.fromInt(0xFF166534))),
+                              pw.Text(currencyFormat.format(group.paidAmount), style: pw.TextStyle(fontSize: 8.5, font: fontBold, color: const PdfColor.fromInt(0xFF166534))),
+                              pw.SizedBox(width: 14),
+                              pw.Text('Due: ', style: pw.TextStyle(fontSize: 8.5, font: fontBold, color: group.dueAmount > 0 ? const PdfColor.fromInt(0xFFDC2626) : const PdfColor.fromInt(0xFF16A34A))),
+                              pw.Text(
+                                currencyFormat.format(group.dueAmount),
+                                style: pw.TextStyle(
+                                  fontSize: 8.5,
+                                  font: fontBold,
+                                  color: group.dueAmount > 0 ? const PdfColor.fromInt(0xFFDC2626) : const PdfColor.fromInt(0xFF16A34A),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+
+            // Final Combined Order Grand Summary (Total Jersey Price, Total Paid, Total Due)
+            pw.Container(
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(
+                color: cardBg,
+                border: pw.Border.all(color: primaryDark, width: 1.2),
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  _styledHeaderCell('ITEM DESCRIPTION', align: pw.TextAlign.left),
-                  _styledHeaderCell('QTY', align: pw.TextAlign.center),
-                  _styledHeaderCell('UNIT PRICE (BDT)', align: pw.TextAlign.right),
-                  _styledHeaderCell('TOTAL AMOUNT', align: pw.TextAlign.right),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'TOTAL COMBINED ORDER SUMMARY',
+                        style: pw.TextStyle(fontSize: 9, font: fontBold, color: primaryDark),
+                      ),
+                      pw.SizedBox(height: 2),
+                      pw.Text(
+                        'Total Pieces: ${bill.totalQuantity} pcs across ${bill.getClientOrderGroups().length} customer orders',
+                        style: const pw.TextStyle(fontSize: 7.5, color: textMuted),
+                      ),
+                    ],
+                  ),
+                  pw.Row(
+                    children: [
+                      pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.end,
+                        children: [
+                          pw.Text('Total Jersey Price', style: const pw.TextStyle(fontSize: 7.5, color: textMuted)),
+                          pw.Text(
+                            currencyFormat.format(bill.grandTotal),
+                            style: pw.TextStyle(fontSize: 10, font: fontBold, color: primaryDark),
+                          ),
+                        ],
+                      ),
+                      pw.SizedBox(width: 16),
+                      pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.end,
+                        children: [
+                          pw.Text('Total Paid', style: const pw.TextStyle(fontSize: 7.5, color: textMuted)),
+                          pw.Text(
+                            currencyFormat.format(bill.paidAmount),
+                            style: pw.TextStyle(fontSize: 10, font: fontBold, color: const PdfColor.fromInt(0xFF166534)),
+                          ),
+                        ],
+                      ),
+                      pw.SizedBox(width: 16),
+                      pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.end,
+                        children: [
+                          pw.Text('Total Due', style: const pw.TextStyle(fontSize: 7.5, color: textMuted)),
+                          pw.Text(
+                            currencyFormat.format(bill.dueAmount),
+                            style: pw.TextStyle(
+                              fontSize: 11,
+                              font: fontBold,
+                              color: bill.dueAmount > 0 ? const PdfColor.fromInt(0xFFDC2626) : const PdfColor.fromInt(0xFF16A34A),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ],
               ),
-              // Item Rows with alternating subtle tint
-              ...List.generate(bill.items.length, (index) {
-                final item = bill.items[index];
-                final isZebra = index % 2 == 1;
-                return pw.TableRow(
-                  decoration: pw.BoxDecoration(
-                    color: isZebra ? zebraBg : PdfColors.white,
-                    border: const pw.Border(
+            ),
+          ] else ...[
+            // Standard Customer Single Invoice Table
+            pw.Table(
+              border: const pw.TableBorder(
+                bottom: pw.BorderSide(color: borderColor, width: 0.8),
+              ),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(4.6), // Description
+                1: const pw.FlexColumnWidth(1.2), // Quantity
+                2: const pw.FlexColumnWidth(1.8), // Rate
+                3: const pw.FlexColumnWidth(2.0), // Total
+              },
+              children: [
+                // Dark Corporate Header Bar
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(
+                    color: tableHeaderBg,
+                  ),
+                  children: [
+                    _styledHeaderCell('ITEM DESCRIPTION', align: pw.TextAlign.left),
+                    _styledHeaderCell('QTY', align: pw.TextAlign.center),
+                    _styledHeaderCell('UNIT PRICE (BDT)', align: pw.TextAlign.right),
+                    _styledHeaderCell('TOTAL AMOUNT', align: pw.TextAlign.right),
+                  ],
+                ),
+                // Item Rows with alternating subtle tint
+                ...List.generate(bill.items.length, (index) {
+                  final item = bill.items[index];
+                  final isZebra = index % 2 == 1;
+                  return pw.TableRow(
+                    decoration: pw.BoxDecoration(
+                      color: isZebra ? zebraBg : PdfColors.white,
+                      border: const pw.Border(
+                        bottom: pw.BorderSide(color: borderColor, width: 0.5),
+                      ),
+                    ),
+                    children: [
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(vertical: 7, horizontal: 8),
+                        child: pw.Text(
+                          item.description,
+                          style: pw.TextStyle(fontSize: 9, font: fontMedium, color: textDark),
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(vertical: 7, horizontal: 8),
+                        child: pw.Text(
+                          '${item.quantity}',
+                          textAlign: pw.TextAlign.center,
+                          style: const pw.TextStyle(fontSize: 9, color: textBody),
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(vertical: 7, horizontal: 8),
+                        child: pw.Text(
+                          currencyFormat.format(item.unitPrice),
+                          textAlign: pw.TextAlign.right,
+                          style: const pw.TextStyle(fontSize: 9, color: textBody),
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(vertical: 7, horizontal: 8),
+                        child: pw.Text(
+                          currencyFormat.format(item.totalPrice),
+                          textAlign: pw.TextAlign.right,
+                          style: pw.TextStyle(fontSize: 9, font: fontBold, color: textDark),
+                        ),
+                      ),
+                    ],
+                  );
+                }),
+                // Grand Total Summary Row
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(
+                    color: cardBg,
+                    border: pw.Border(
+                      top: pw.BorderSide(color: primaryDark, width: 1.0),
                       bottom: pw.BorderSide(color: borderColor, width: 0.5),
                     ),
                   ),
                   children: [
                     pw.Padding(
-                      padding: const pw.EdgeInsets.symmetric(vertical: 7, horizontal: 8),
+                      padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                       child: pw.Text(
-                        item.description,
-                        style: pw.TextStyle(fontSize: 9, font: fontMedium, color: textDark),
+                        'Total Quantity',
+                        style: pw.TextStyle(font: fontBold, fontSize: 9, color: primaryDark),
                       ),
                     ),
                     pw.Padding(
-                      padding: const pw.EdgeInsets.symmetric(vertical: 7, horizontal: 8),
+                      padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                       child: pw.Text(
-                        '${item.quantity}',
+                        '${bill.totalQuantity} pcs',
                         textAlign: pw.TextAlign.center,
-                        style: const pw.TextStyle(fontSize: 9, color: textBody),
+                        style: pw.TextStyle(font: fontBold, fontSize: 9, color: primaryDark),
                       ),
                     ),
                     pw.Padding(
-                      padding: const pw.EdgeInsets.symmetric(vertical: 7, horizontal: 8),
+                      padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                       child: pw.Text(
-                        currencyFormat.format(item.unitPrice),
+                        'Total Bill:',
                         textAlign: pw.TextAlign.right,
-                        style: const pw.TextStyle(fontSize: 9, color: textBody),
+                        style: pw.TextStyle(font: fontBold, fontSize: 9, color: primaryDark),
                       ),
                     ),
                     pw.Padding(
-                      padding: const pw.EdgeInsets.symmetric(vertical: 7, horizontal: 8),
+                      padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                       child: pw.Text(
-                        currencyFormat.format(item.totalPrice),
+                        currencyFormat.format(bill.grandTotal),
                         textAlign: pw.TextAlign.right,
-                        style: pw.TextStyle(fontSize: 9, font: fontBold, color: textDark),
+                        style: pw.TextStyle(font: fontBold, fontSize: 10, color: primaryDark),
                       ),
                     ),
                   ],
-                );
-              }),
-              // Grand Total Summary Row
-              pw.TableRow(
-                decoration: const pw.BoxDecoration(
-                  color: cardBg,
-                  border: pw.Border(
-                    top: pw.BorderSide(color: primaryDark, width: 1.0),
-                    bottom: pw.BorderSide(color: borderColor, width: 0.5),
-                  ),
                 ),
-                children: [
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                    child: pw.Text(
-                      'Total Quantity',
-                      style: pw.TextStyle(font: fontBold, fontSize: 9, color: primaryDark),
+                // Paid Amount Row
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(
+                    color: PdfColors.white,
+                    border: pw.Border(
+                      bottom: pw.BorderSide(color: borderColor, width: 0.5),
                     ),
                   ),
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                    child: pw.Text(
-                      '${bill.totalQuantity} pcs',
-                      textAlign: pw.TextAlign.center,
-                      style: pw.TextStyle(font: fontBold, fontSize: 9, color: primaryDark),
-                    ),
-                  ),
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                    child: pw.Text(
-                      'Total Bill:',
-                      textAlign: pw.TextAlign.right,
-                      style: pw.TextStyle(font: fontBold, fontSize: 9, color: primaryDark),
-                    ),
-                  ),
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                    child: pw.Text(
-                      currencyFormat.format(bill.grandTotal),
-                      textAlign: pw.TextAlign.right,
-                      style: pw.TextStyle(font: fontBold, fontSize: 10, color: primaryDark),
-                    ),
-                  ),
-                ],
-              ),
-              // Paid Amount Row
-              pw.TableRow(
-                decoration: const pw.BoxDecoration(
-                  color: PdfColors.white,
-                  border: pw.Border(
-                    bottom: pw.BorderSide(color: borderColor, width: 0.5),
-                  ),
-                ),
-                children: [
-                  pw.Container(),
-                  pw.Container(),
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
-                    child: pw.Text(
-                      'Paid Amount:',
-                      textAlign: pw.TextAlign.right,
-                      style: pw.TextStyle(font: fontBold, fontSize: 8.5, color: const PdfColor.fromInt(0xFF166534)),
-                    ),
-                  ),
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
-                    child: pw.Text(
-                      currencyFormat.format(bill.paidAmount),
-                      textAlign: pw.TextAlign.right,
-                      style: pw.TextStyle(font: fontBold, fontSize: 9, color: const PdfColor.fromInt(0xFF166534)),
-                    ),
-                  ),
-                ],
-              ),
-              // Due Amount Row
-              pw.TableRow(
-                decoration: pw.BoxDecoration(
-                  color: bill.dueAmount > 0 ? const PdfColor.fromInt(0xFFFEF2F2) : const PdfColor.fromInt(0xFFF0FDF4),
-                  border: const pw.Border(
-                    bottom: pw.BorderSide(color: borderColor, width: 0.8),
-                  ),
-                ),
-                children: [
-                  pw.Container(),
-                  pw.Container(),
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                    child: pw.Text(
-                      'Due Amount:',
-                      textAlign: pw.TextAlign.right,
-                      style: pw.TextStyle(
-                        font: fontBold,
-                        fontSize: 9.5,
-                        color: bill.dueAmount > 0 ? const PdfColor.fromInt(0xFFDC2626) : const PdfColor.fromInt(0xFF16A34A),
+                  children: [
+                    pw.Container(),
+                    pw.Container(),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+                      child: pw.Text(
+                        'Paid Amount:',
+                        textAlign: pw.TextAlign.right,
+                        style: pw.TextStyle(font: fontBold, fontSize: 8.5, color: const PdfColor.fromInt(0xFF166534)),
                       ),
                     ),
-                  ),
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                    child: pw.Text(
-                      currencyFormat.format(bill.dueAmount),
-                      textAlign: pw.TextAlign.right,
-                      style: pw.TextStyle(
-                        font: fontBold,
-                        fontSize: 10.5,
-                        color: bill.dueAmount > 0 ? const PdfColor.fromInt(0xFFDC2626) : const PdfColor.fromInt(0xFF16A34A),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+                      child: pw.Text(
+                        currencyFormat.format(bill.paidAmount),
+                        textAlign: pw.TextAlign.right,
+                        style: pw.TextStyle(font: fontBold, fontSize: 9, color: const PdfColor.fromInt(0xFF166534)),
                       ),
                     ),
+                  ],
+                ),
+                // Due Amount Row
+                pw.TableRow(
+                  decoration: pw.BoxDecoration(
+                    color: bill.dueAmount > 0 ? const PdfColor.fromInt(0xFFFEF2F2) : const PdfColor.fromInt(0xFFF0FDF4),
+                    border: const pw.Border(
+                      bottom: pw.BorderSide(color: borderColor, width: 0.8),
+                    ),
                   ),
-                ],
-              ),
-            ],
-          ),
+                  children: [
+                    pw.Container(),
+                    pw.Container(),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                      child: pw.Text(
+                        'Due Amount:',
+                        textAlign: pw.TextAlign.right,
+                        style: pw.TextStyle(
+                          font: fontBold,
+                          fontSize: 9.5,
+                          color: bill.dueAmount > 0 ? const PdfColor.fromInt(0xFFDC2626) : const PdfColor.fromInt(0xFF16A34A),
+                        ),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                      child: pw.Text(
+                        currencyFormat.format(bill.dueAmount),
+                        textAlign: pw.TextAlign.right,
+                        style: pw.TextStyle(
+                          font: fontBold,
+                          fontSize: 10.5,
+                          color: bill.dueAmount > 0 ? const PdfColor.fromInt(0xFFDC2626) : const PdfColor.fromInt(0xFF16A34A),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
 
           pw.SizedBox(height: 8),
 

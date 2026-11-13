@@ -47,6 +47,9 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
   late TextEditingController _deliveryFeeController;
   late TextEditingController _discountController;
   late TextEditingController _paidController;
+  late TextEditingController _notesController;
+
+  final Map<String, TextEditingController> _clientPaidControllers = {};
 
   late DateTime _selectedDate;
   String _selectedStatus = 'Pending';
@@ -60,6 +63,8 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
     super.initState();
     final bill = widget.existingBill;
     _invoiceType = bill?.invoiceType ?? widget.initialInvoiceType;
+
+    _notesController = TextEditingController(text: bill?.notes ?? '');
 
     if (bill != null) {
       _invoiceNoController = TextEditingController(text: bill.invoiceNumber);
@@ -76,6 +81,19 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
       _selectedDate = bill.date;
       _selectedStatus = bill.paymentStatus;
       _items = List.from(bill.items);
+
+      if (bill.clientGroups.isNotEmpty) {
+        for (final g in bill.clientGroups) {
+          _clientPaidControllers[g.groupKey] = TextEditingController(
+            text: g.paidAmount > 0 ? g.paidAmount.toStringAsFixed(0) : '0',
+          );
+        }
+      }
+
+      // If opening as order invoice, ensure items are converted to admin panel fixed wholesale prices
+      if (_invoiceType == 'order') {
+        _convertInitialItemsToOrderPrices();
+      }
     } else {
       _invoiceNoController = TextEditingController();
       _nameController = TextEditingController();
@@ -91,6 +109,92 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
     }
 
     _loadPreviousCustomers();
+  }
+
+  Future<void> _convertInitialItemsToOrderPrices() async {
+    final updated = await FabricService.convertItemPricesForType(_items, 'order');
+    if (mounted) {
+      setState(() {
+        _items = updated;
+      });
+    }
+  }
+
+  List<ClientOrderGroup> _getClientGroups() {
+    if (_invoiceType != 'order') return [];
+
+    final Map<String, List<OrderItem>> grouped = {};
+    for (final item in _items) {
+      final match = RegExp(r'^\[(.*?)\]\s*(.*)$').firstMatch(item.description);
+      final client = match != null ? match.group(1)!.trim() : _nameController.text.trim();
+      final key = client.isEmpty ? 'Client Order' : client;
+      grouped.putIfAbsent(key, () => []).add(item);
+    }
+
+    final List<ClientOrderGroup> list = [];
+    grouped.forEach((key, clientItems) {
+      final price = clientItems.fold(0.0, (s, i) => s + i.totalPrice);
+
+      final invMatch = RegExp(r'^(.*?)\s*\((JT-[^\)]+)\)$').firstMatch(key);
+      final clientName = invMatch != null ? invMatch.group(1)!.trim() : key;
+      final invoiceNo = invMatch != null ? invMatch.group(2)!.trim() : '';
+
+      String project = '';
+      if (!_clientPaidControllers.containsKey(key)) {
+        double initialPaid = 0.0;
+        final existing = widget.existingBill?.clientGroups.firstWhere(
+          (g) => g.groupKey.toLowerCase() == key.toLowerCase() ||
+                 (invoiceNo.isNotEmpty && g.invoiceNumber == invoiceNo),
+          orElse: () => ClientOrderGroup(clientId: '', clientName: '', jerseyPrice: 0),
+        );
+        if (existing != null) {
+          project = existing.project;
+          if (existing.paidAmount > 0) {
+            initialPaid = existing.paidAmount;
+          }
+        }
+        _clientPaidControllers[key] = TextEditingController(
+          text: initialPaid > 0 ? initialPaid.toStringAsFixed(0) : '0',
+        );
+      } else {
+        final existing = widget.existingBill?.clientGroups.firstWhere(
+          (g) => g.groupKey.toLowerCase() == key.toLowerCase() ||
+                 (invoiceNo.isNotEmpty && g.invoiceNumber == invoiceNo),
+          orElse: () => ClientOrderGroup(clientId: '', clientName: '', jerseyPrice: 0),
+        );
+        if (existing != null) {
+          project = existing.project;
+        }
+      }
+
+      final ctrl = _clientPaidControllers[key]!;
+      final currentPaid = double.tryParse(ctrl.text.trim()) ?? 0.0;
+
+      list.add(ClientOrderGroup(
+        clientId: key,
+        clientName: clientName,
+        invoiceNumber: invoiceNo,
+        project: project,
+        items: clientItems,
+        jerseyPrice: price,
+        paidAmount: currentPaid,
+      ));
+    });
+
+    return list;
+  }
+
+  void _onClientPaidChanged(String groupKey, String val) {
+    final groups = _getClientGroups();
+    double totalPaid = 0.0;
+    for (final g in groups) {
+      final ctrl = _clientPaidControllers[g.groupKey];
+      if (ctrl != null) {
+        totalPaid += double.tryParse(ctrl.text.trim()) ?? 0.0;
+      }
+    }
+    _paidController.text = totalPaid > 0 ? totalPaid.toStringAsFixed(0) : '0';
+    _onFinancialsChanged();
   }
 
   Future<void> _loadPreviousCustomers() async {
@@ -184,6 +288,10 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
     _deliveryFeeController.dispose();
     _discountController.dispose();
     _paidController.dispose();
+    _notesController.dispose();
+    for (final c in _clientPaidControllers.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -263,6 +371,7 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
   }
 
   Bill _buildBill() {
+    final clientGroups = _invoiceType == 'order' ? _getClientGroups() : <ClientOrderGroup>[];
     return Bill(
       id: widget.existingBill?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
       invoiceNumber: _invoiceNoController.text.trim().isEmpty ? 'JT-2026-1029' : _invoiceNoController.text.trim(),
@@ -277,6 +386,8 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
       deliveryFee: _deliveryFee,
       discount: _discount,
       paidAmount: _paidAmount,
+      notes: _notesController.text.trim(),
+      clientGroups: clientGroups,
     );
   }
 
@@ -734,6 +845,316 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                                 ),
                               ),
                             )
+                          else if (_invoiceType == 'order')
+                            // Client-by-client Breakdown for Order Invoices
+                            Builder(
+                              builder: (context) {
+                                final groups = _getClientGroups();
+                                return Column(
+                                  children: groups.asMap().entries.map((entry) {
+                                    final groupIndex = entry.key;
+                                    final group = entry.value;
+                                    final ctrl = _clientPaidControllers[group.groupKey]!;
+                                    final paid = double.tryParse(ctrl.text.trim()) ?? 0.0;
+                                    final due = (group.jerseyPrice - paid).clamp(0.0, double.infinity);
+
+                                    return Container(
+                                      margin: const EdgeInsets.only(bottom: 14),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(color: Colors.purple.shade200, width: 1.2),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.purple.withValues(alpha: 0.04),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                                        children: [
+                                          // Client Header
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                            decoration: BoxDecoration(
+                                              color: Colors.purple.shade50,
+                                              borderRadius: const BorderRadius.only(
+                                                topLeft: Radius.circular(9),
+                                                topRight: Radius.circular(9),
+                                              ),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                CircleAvatar(
+                                                  radius: 12,
+                                                  backgroundColor: Colors.purple,
+                                                  child: Text(
+                                                    '${groupIndex + 1}',
+                                                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        group.clientName,
+                                                        style: const TextStyle(
+                                                          fontWeight: FontWeight.bold,
+                                                          fontSize: 14,
+                                                          color: Colors.purple,
+                                                        ),
+                                                      ),
+                                                      Row(
+                                                        children: [
+                                                          if (group.invoiceNumber.isNotEmpty)
+                                                            Text(
+                                                              'Invoice: ${group.invoiceNumber}',
+                                                              style: TextStyle(
+                                                                fontSize: 11,
+                                                                fontWeight: FontWeight.w600,
+                                                                color: Colors.purple.shade700,
+                                                              ),
+                                                            ),
+                                                          if (group.invoiceNumber.isNotEmpty && group.project.isNotEmpty)
+                                                            Text(
+                                                              ' • ',
+                                                              style: TextStyle(
+                                                                fontSize: 11,
+                                                                color: Colors.purple.shade400,
+                                                              ),
+                                                            ),
+                                                          if (group.project.isNotEmpty)
+                                                            Flexible(
+                                                              child: Text(
+                                                                'Project: ${group.project}',
+                                                                overflow: TextOverflow.ellipsis,
+                                                                style: TextStyle(
+                                                                  fontSize: 11,
+                                                                  fontWeight: FontWeight.w600,
+                                                                  color: Colors.purple.shade900,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                        ],
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                Text(
+                                                  '${group.items.fold(0, (s, i) => s + i.quantity)} pcs',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Colors.purple.shade700,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+
+                                          // Client Items List
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                            child: Column(
+                                              children: group.items.map((item) {
+                                                final itemIndex = _items.indexOf(item);
+                                                final cleanDesc = item.description.replaceFirst(RegExp(r'^\[.*?\]\s*'), '');
+                                                return Padding(
+                                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                                  child: Row(
+                                                    children: [
+                                                      Expanded(
+                                                        child: Column(
+                                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                                          children: [
+                                                            Text(
+                                                              cleanDesc.isEmpty ? item.description : cleanDesc,
+                                                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                                            ),
+                                                            Text(
+                                                              '${item.quantity} pcs × ${currency.format(item.unitPrice)} (Wholesale)',
+                                                              style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                      Text(
+                                                        currency.format(item.totalPrice),
+                                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                                      ),
+                                                      if (itemIndex >= 0) ...[
+                                                        IconButton(
+                                                          icon: const Icon(Icons.edit_outlined, size: 16),
+                                                          padding: EdgeInsets.zero,
+                                                          constraints: const BoxConstraints(),
+                                                          onPressed: () => _editItem(itemIndex),
+                                                        ),
+                                                        const SizedBox(width: 6),
+                                                        IconButton(
+                                                          icon: const Icon(Icons.delete_outline, size: 16, color: AppTheme.danger),
+                                                          padding: EdgeInsets.zero,
+                                                          constraints: const BoxConstraints(),
+                                                          onPressed: () => _deleteItem(itemIndex),
+                                                        ),
+                                                      ],
+                                                    ],
+                                                  ),
+                                                );
+                                              }).toList(),
+                                            ),
+                                          ),
+
+                                          const Divider(height: 1),
+
+                                          // Jersey Price, Paid Amount & Due underneath for this Client
+                                          Container(
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              color: Colors.purple.shade50.withValues(alpha: 0.4),
+                                              borderRadius: const BorderRadius.only(
+                                                bottomLeft: Radius.circular(9),
+                                                bottomRight: Radius.circular(9),
+                                              ),
+                                            ),
+                                            child: Column(
+                                              children: [
+                                                // Jersey Price for this Client
+                                                Row(
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                  children: [
+                                                    Text(
+                                                      '${group.displayTitle} Jersey Price:',
+                                                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                                                    ),
+                                                    Text(
+                                                      currency.format(group.jerseyPrice),
+                                                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.purple),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 8),
+
+                                                // Paid & Due underneath
+                                                Row(
+                                                  children: [
+                                                    Expanded(
+                                                      flex: 3,
+                                                      child: Row(
+                                                        children: [
+                                                          const Text('Paid: ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                                          const SizedBox(width: 4),
+                                                          Expanded(
+                                                            child: SizedBox(
+                                                              height: 36,
+                                                              child: TextFormField(
+                                                                controller: ctrl,
+                                                                keyboardType: TextInputType.number,
+                                                                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+                                                                decoration: InputDecoration(
+                                                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                                                  suffixText: 'BDT',
+                                                                  suffixStyle: const TextStyle(fontSize: 10),
+                                                                  isDense: true,
+                                                                  filled: true,
+                                                                  fillColor: Colors.white,
+                                                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                                                                ),
+                                                                onChanged: (val) {
+                                                                  setState(() {
+                                                                    _onClientPaidChanged(group.groupKey, val);
+                                                                  });
+                                                                },
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          const SizedBox(width: 4),
+                                                          InkWell(
+                                                            onTap: () {
+                                                              ctrl.text = '0';
+                                                              setState(() {
+                                                                _onClientPaidChanged(group.groupKey, '0');
+                                                              });
+                                                            },
+                                                            child: Container(
+                                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                                              decoration: BoxDecoration(
+                                                                color: Colors.grey.shade200,
+                                                                borderRadius: BorderRadius.circular(4),
+                                                              ),
+                                                              child: const Text('0', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
+                                                            ),
+                                                          ),
+                                                          const SizedBox(width: 4),
+                                                          InkWell(
+                                                            onTap: () {
+                                                              ctrl.text = group.jerseyPrice.toStringAsFixed(0);
+                                                              setState(() {
+                                                                _onClientPaidChanged(group.groupKey, ctrl.text);
+                                                              });
+                                                            },
+                                                            child: Container(
+                                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                                                              decoration: BoxDecoration(
+                                                                color: Colors.green.shade100,
+                                                                borderRadius: BorderRadius.circular(4),
+                                                              ),
+                                                              child: const Text('Full', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.green)),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 12),
+                                                    Expanded(
+                                                      flex: 2,
+                                                      child: Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                                        decoration: BoxDecoration(
+                                                          color: due > 0 ? const Color(0xFFFEF2F2) : const Color(0xFFF0FDF4),
+                                                          borderRadius: BorderRadius.circular(6),
+                                                          border: Border.all(
+                                                            color: due > 0 ? const Color(0xFFFCA5A5) : const Color(0xFF86EFAC),
+                                                          ),
+                                                        ),
+                                                        child: Row(
+                                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                          children: [
+                                                            Text(
+                                                              'Due:',
+                                                              style: TextStyle(
+                                                                fontSize: 11,
+                                                                fontWeight: FontWeight.bold,
+                                                                color: due > 0 ? const Color(0xFF991B1B) : const Color(0xFF166534),
+                                                              ),
+                                                            ),
+                                                            Text(
+                                                              currency.format(due),
+                                                              style: TextStyle(
+                                                                fontSize: 12,
+                                                                fontWeight: FontWeight.bold,
+                                                                color: due > 0 ? const Color(0xFFDC2626) : const Color(0xFF16A34A),
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }).toList(),
+                                );
+                              },
+                            )
                           else
                             ListView.separated(
                               shrinkWrap: true,
@@ -757,7 +1178,7 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                                   ),
                                   title: Text(item.description, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5)),
                                   subtitle: Text(
-                                    '${item.quantity} pcs × ${currency.format(item.unitPrice)} ${isCustomer ? "(Selling)" : "(Fixed Order Price)"}',
+                                    '${item.quantity} pcs × ${currency.format(item.unitPrice)} (Selling)',
                                     style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
                                   ),
                                   trailing: Row(
@@ -858,7 +1279,10 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                                     Column(
                                       crossAxisAlignment: CrossAxisAlignment.end,
                                       children: [
-                                        const Text('Grand Total', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                                        Text(
+                                          isCustomer ? 'Grand Total' : 'Total Jersey Price',
+                                          style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                                        ),
                                         Text(
                                           currency.format(_grandTotal),
                                           style: TextStyle(
@@ -886,39 +1310,45 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                                           TextFormField(
                                             controller: _paidController,
                                             keyboardType: TextInputType.number,
+                                            readOnly: _invoiceType == 'order',
                                             decoration: InputDecoration(
-                                              labelText: 'Paid Amount',
+                                              labelText: _invoiceType == 'order' ? 'Total Paid (Calculated)' : 'Paid Amount',
                                               hintText: 'e.g. 1500',
                                               prefixIcon: const Icon(Icons.payments_outlined, size: 18),
                                               suffixText: 'BDT',
                                               isDense: true,
                                               filled: true,
-                                              fillColor: Colors.white,
+                                              fillColor: _invoiceType == 'order' ? Colors.grey.shade100 : Colors.white,
                                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                              helperText: _invoiceType == 'order'
+                                                  ? 'Auto-calculated from individual client paid amounts above'
+                                                  : null,
                                             ),
                                             onChanged: (_) => _onFinancialsChanged(),
                                           ),
-                                          const SizedBox(height: 6),
-                                          Wrap(
-                                            spacing: 6,
-                                            children: [
-                                              ActionChip(
-                                                label: const Text('Full Paid', style: TextStyle(fontSize: 11)),
-                                                avatar: const Icon(Icons.check_circle_outline, size: 14, color: AppTheme.success),
-                                                onPressed: _setFullPaid,
-                                              ),
-                                              ActionChip(
-                                                label: const Text('50% Adv', style: TextStyle(fontSize: 11)),
-                                                avatar: const Icon(Icons.pie_chart_outline, size: 14, color: AppTheme.accent),
-                                                onPressed: _setPartialHalf,
-                                              ),
-                                              ActionChip(
-                                                label: const Text('Due All', style: TextStyle(fontSize: 11)),
-                                                avatar: const Icon(Icons.money_off, size: 14, color: AppTheme.warning),
-                                                onPressed: _clearPaid,
-                                              ),
-                                            ],
-                                          ),
+                                          if (_invoiceType != 'order') ...[
+                                            const SizedBox(height: 6),
+                                            Wrap(
+                                              spacing: 6,
+                                              children: [
+                                                ActionChip(
+                                                  label: const Text('Full Paid', style: TextStyle(fontSize: 11)),
+                                                  avatar: const Icon(Icons.check_circle_outline, size: 14, color: AppTheme.success),
+                                                  onPressed: _setFullPaid,
+                                                ),
+                                                ActionChip(
+                                                  label: const Text('50% Adv', style: TextStyle(fontSize: 11)),
+                                                  avatar: const Icon(Icons.pie_chart_outline, size: 14, color: AppTheme.accent),
+                                                  onPressed: _setPartialHalf,
+                                                ),
+                                                ActionChip(
+                                                  label: const Text('Due All', style: TextStyle(fontSize: 11)),
+                                                  avatar: const Icon(Icons.money_off, size: 14, color: AppTheme.warning),
+                                                  onPressed: _clearPaid,
+                                                ),
+                                              ],
+                                            ),
+                                          ],
                                         ],
                                       ),
                                     ),
@@ -938,7 +1368,9 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
                                           crossAxisAlignment: CrossAxisAlignment.center,
                                           children: [
                                             Text(
-                                              _dueAmount > 0 ? 'DUE BALANCE' : 'PAYMENT STATUS',
+                                              _dueAmount > 0
+                                                  ? (_invoiceType == 'order' ? 'TOTAL DUE' : 'DUE BALANCE')
+                                                  : 'PAYMENT STATUS',
                                               style: TextStyle(
                                                 fontSize: 10,
                                                 fontWeight: FontWeight.w700,

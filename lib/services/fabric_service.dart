@@ -10,6 +10,7 @@ class FabricService {
   static const String _fabricsPrefsKey = 'jerseytude_fabrics_catalog_v2';
   static const String _adminPinPrefsKey = 'jerseytude_admin_pin_v2';
   static const String _adminSessionKey = 'jerseytude_admin_session_unlocked';
+  static const String _activeScreenKey = 'jerseytude_active_screen';
   static const String _seededFlagKey = 'jerseytude_fabrics_seeded_v2';
 
   static const String fabricsBoxName = 'jerseytude_fabrics_box';
@@ -65,6 +66,9 @@ class FabricService {
   static Future<void> init() async {
     if (_isInitialized) return;
     try {
+      await Hive.initFlutter();
+    } catch (_) {}
+    try {
       if (!Hive.isBoxOpen(fabricsBoxName)) {
         await Hive.openBox<String>(fabricsBoxName);
       }
@@ -79,34 +83,93 @@ class FabricService {
   static Future<List<FabricItem>> getAllFabrics() async {
     await init();
 
-    if (_memoryCache != null) {
+    if (_memoryCache != null && _memoryCache!.isNotEmpty) {
       return List.from(_memoryCache!);
     }
 
+    List<FabricItem> loadedFabrics = [];
+
+    // 1. Load from SharedPreferences
     try {
       final prefs = await SharedPreferences.getInstance();
-      final hasBeenSeeded = prefs.getBool(_seededFlagKey) ?? false;
       final rawJson = prefs.getString(_fabricsPrefsKey);
-
-      if (rawJson != null) {
+      if (rawJson != null && rawJson.trim().isNotEmpty) {
         final List<dynamic> decoded = jsonDecode(rawJson) as List<dynamic>;
-        final list = decoded.map((m) => FabricItem.fromMap(Map<String, dynamic>.from(m as Map))).toList();
-        _memoryCache = list;
-        return List.from(list);
-      }
-
-      // If never seeded before, seed default fabrics
-      if (!hasBeenSeeded) {
-        final initial = List<FabricItem>.from(_defaultFabrics);
-        await _saveFabricsToPrefs(initial);
-        await prefs.setBool(_seededFlagKey, true);
-        _memoryCache = initial;
-        return initial;
+        loadedFabrics = decoded
+            .map((m) => FabricItem.fromMap(Map<String, dynamic>.from(m as Map)))
+            .toList();
       }
     } catch (_) {}
 
-    // Fallback if SharedPreferences fails
-    return List.from(_defaultFabrics);
+    // 2. Fallback to Hive if SharedPreferences was empty
+    if (loadedFabrics.isEmpty) {
+      try {
+        if (Hive.isBoxOpen(fabricsBoxName)) {
+          final box = Hive.box<String>(fabricsBoxName);
+          final List<FabricItem> fromHive = [];
+          for (final key in box.keys) {
+            final raw = box.get(key);
+            if (raw != null && raw.trim().isNotEmpty) {
+              final map = jsonDecode(raw) as Map<String, dynamic>;
+              fromHive.add(FabricItem.fromMap(map));
+            }
+          }
+          if (fromHive.isNotEmpty) {
+            loadedFabrics = fromHive;
+            await _saveFabricsToPrefs(loadedFabrics);
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 3. Sync with Firestore if available
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        final snapshot = await FirebaseFirestore.instance
+            .collection(firestoreCollection)
+            .get();
+        if (snapshot.docs.isNotEmpty) {
+          final fromFirestore = snapshot.docs.map((doc) {
+            final data = doc.data();
+            data['id'] = doc.id;
+            return FabricItem.fromMap(data);
+          }).toList();
+
+          if (fromFirestore.isNotEmpty) {
+            loadedFabrics = fromFirestore;
+            await _saveFabricsToPrefs(loadedFabrics);
+            await _saveFabricsToHive(loadedFabrics);
+          }
+        } else if (loadedFabrics.isNotEmpty) {
+          for (final f in loadedFabrics) {
+            await FirebaseFirestore.instance
+                .collection(firestoreCollection)
+                .doc(f.id)
+                .set(f.toMap(), SetOptions(merge: true));
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 4. Default Seed if all stores empty
+    if (loadedFabrics.isEmpty) {
+      loadedFabrics = List<FabricItem>.from(_defaultFabrics);
+      await _saveFabricsToPrefs(loadedFabrics);
+      await _saveFabricsToHive(loadedFabrics);
+      try {
+        if (Firebase.apps.isNotEmpty) {
+          for (final f in loadedFabrics) {
+            await FirebaseFirestore.instance
+                .collection(firestoreCollection)
+                .doc(f.id)
+                .set(f.toMap(), SetOptions(merge: true));
+          }
+        }
+      } catch (_) {}
+    }
+
+    _memoryCache = List.from(loadedFabrics);
+    return List.from(loadedFabrics);
   }
 
   static Future<void> _saveFabricsToPrefs(List<FabricItem> list) async {
@@ -115,6 +178,18 @@ class FabricService {
       final encoded = jsonEncode(list.map((f) => f.toMap()).toList());
       await prefs.setString(_fabricsPrefsKey, encoded);
       await prefs.setBool(_seededFlagKey, true);
+    } catch (_) {}
+  }
+
+  static Future<void> _saveFabricsToHive(List<FabricItem> list) async {
+    try {
+      if (Hive.isBoxOpen(fabricsBoxName)) {
+        final box = Hive.box<String>(fabricsBoxName);
+        await box.clear();
+        for (final item in list) {
+          await box.put(item.id, jsonEncode(item.toMap()));
+        }
+      }
     } catch (_) {}
   }
 
@@ -131,16 +206,9 @@ class FabricService {
 
     _memoryCache = List.from(currentList);
     await _saveFabricsToPrefs(currentList);
+    await _saveFabricsToHive(currentList);
 
-    // Save to Hive cache
-    try {
-      if (Hive.isBoxOpen(fabricsBoxName)) {
-        final box = Hive.box<String>(fabricsBoxName);
-        await box.put(fabric.id, jsonEncode(fabric.toMap()));
-      }
-    } catch (_) {}
-
-    // Background sync to Cloud Firestore
+    // Sync to Cloud Firestore
     try {
       if (Firebase.apps.isNotEmpty) {
         await FirebaseFirestore.instance
@@ -159,7 +227,6 @@ class FabricService {
     _memoryCache = List.from(currentList);
     await _saveFabricsToPrefs(currentList);
 
-    // Delete from Hive
     try {
       if (Hive.isBoxOpen(fabricsBoxName)) {
         final box = Hive.box<String>(fabricsBoxName);
@@ -167,12 +234,28 @@ class FabricService {
       }
     } catch (_) {}
 
-    // Delete from Firestore
     try {
       if (Firebase.apps.isNotEmpty) {
         await FirebaseFirestore.instance.collection(firestoreCollection).doc(id).delete();
       }
     } catch (_) {}
+  }
+
+  // ── ROUTE / SCREEN PERSISTENCE ────────────────────────────────
+  static Future<void> setActiveScreen(String screen) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_activeScreenKey, screen);
+    } catch (_) {}
+  }
+
+  static Future<String> getActiveScreen() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_activeScreenKey) ?? 'home';
+    } catch (_) {
+      return 'home';
+    }
   }
 
   // ── ADMIN AUTH & SESSION MANAGEMENT ──────────────────────────
@@ -190,6 +273,7 @@ class FabricService {
     final isValid = input.trim() == current.trim();
     if (isValid) {
       await setAdminSessionUnlocked(true);
+      await setActiveScreen('admin');
     }
     return isValid;
   }
@@ -219,6 +303,7 @@ class FabricService {
 
   static Future<void> logoutAdmin() async {
     await setAdminSessionUnlocked(false);
+    await setActiveScreen('home');
   }
 
   // ── AUTO-ADJUST PRICES BETWEEN CUSTOMER & ORDER INVOICES ─────

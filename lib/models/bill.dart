@@ -1,6 +1,64 @@
 import 'order_item.dart';
 import '../utils/number_to_words.dart';
 
+class ClientOrderGroup {
+  final String clientId;
+  final String clientName;
+  final String invoiceNumber;
+  final String project;
+  final List<OrderItem> items;
+  final double jerseyPrice;
+  double paidAmount;
+
+  ClientOrderGroup({
+    required this.clientId,
+    required this.clientName,
+    this.invoiceNumber = '',
+    this.project = '',
+    this.items = const [],
+    required this.jerseyPrice,
+    this.paidAmount = 0.0,
+  });
+
+  String get groupKey => invoiceNumber.isNotEmpty ? '$clientName ($invoiceNumber)' : clientName;
+  String get displayTitle => invoiceNumber.isNotEmpty ? '$clientName ($invoiceNumber)' : clientName;
+
+  double get dueAmount => (jerseyPrice - paidAmount).clamp(0.0, double.infinity);
+
+  Map<String, dynamic> toMap() => {
+    'clientId': clientId,
+    'clientName': clientName,
+    'invoiceNumber': invoiceNumber,
+    'project': project,
+    'jerseyPrice': jerseyPrice,
+    'paidAmount': paidAmount,
+  };
+
+  factory ClientOrderGroup.fromMap(Map<String, dynamic> map, List<OrderItem> allItems) {
+    final client = map['clientName'] as String? ?? 'Client';
+    final invNo = map['invoiceNumber'] as String? ?? '';
+    final project = map['project'] as String? ?? '';
+    final key = invNo.isNotEmpty ? '$client ($invNo)' : client;
+
+    final matchingItems = allItems.where((i) {
+      if (invNo.isNotEmpty && i.description.contains(invNo)) {
+        return true;
+      }
+      return i.description.startsWith('[$key]') || i.description.startsWith('[$client]');
+    }).toList();
+
+    return ClientOrderGroup(
+      clientId: map['clientId'] as String? ?? '',
+      clientName: client,
+      invoiceNumber: invNo,
+      project: project,
+      items: matchingItems.isNotEmpty ? matchingItems : allItems,
+      jerseyPrice: (map['jerseyPrice'] as num?)?.toDouble() ?? 0.0,
+      paidAmount: (map['paidAmount'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+}
+
 class Bill {
   final String id;
   String invoiceNumber;
@@ -23,6 +81,9 @@ class Bill {
   double paidAmount;
   String paymentMethod;
   String notes;
+
+  // Client Breakdown for Order Invoices
+  List<ClientOrderGroup> clientGroups;
 
   // Company Details (Defaulted to Jerseytude)
   String companyName;
@@ -75,12 +136,14 @@ class Bill {
     this.routingNumber = '060914152',
     this.swiftCode = 'BRAKBDDH',
     List<String>? terms,
+    List<ClientOrderGroup>? clientGroups,
   })  : terms = terms ?? [
           'If payment is made via bKash Send Money, the client must add/include the applicable cash out charge.',
           'Kindly share a transaction screenshot or payment clearance slip once the transfer is completed.',
           'Verify all player typography names, numbers, and sizing distribution charts prior to final manufacturing layout sign-off.',
           'Thank you for choosing JerseyTude for your custom sports apparel.',
         ],
+        clientGroups = clientGroups ?? [],
         paidAmount = paidAmount ?? (paymentStatus == 'Paid' ? items.fold(0.0, (s, i) => s + i.totalPrice) : 0.0);
 
   double get subtotal => items.fold(0.0, (sum, item) => sum + item.totalPrice);
@@ -103,6 +166,50 @@ class Bill {
   bool get isOrderInvoice => invoiceType.toLowerCase() == 'order';
   bool get isCustomerInvoice => !isOrderInvoice;
 
+  List<ClientOrderGroup> getClientOrderGroups() {
+    if (clientGroups.isNotEmpty) return clientGroups;
+
+    // Extract from items formatted like "[Client (InvoiceNo)] ..." or "[Client] ..."
+    final Map<String, List<OrderItem>> grouped = {};
+    for (final item in items) {
+      final match = RegExp(r'^\[(.*?)\]\s*(.*)$').firstMatch(item.description);
+      if (match != null) {
+        final groupTag = match.group(1)?.trim() ?? 'Order';
+        grouped.putIfAbsent(groupTag, () => []).add(item);
+      } else {
+        grouped.putIfAbsent(customerName, () => []).add(item);
+      }
+    }
+
+    if (grouped.length > 1 || isOrderInvoice) {
+      final List<ClientOrderGroup> list = [];
+      double remainingPaid = paidAmount;
+
+      grouped.forEach((groupTag, groupItems) {
+        final price = groupItems.fold(0.0, (s, i) => s + i.totalPrice);
+        final clientPaid = remainingPaid >= price ? price : (remainingPaid > 0 ? remainingPaid : 0.0);
+        remainingPaid = (remainingPaid - clientPaid).clamp(0.0, double.infinity);
+
+        final invMatch = RegExp(r'^(.*?)\s*\((JT-[^\)]+)\)$').firstMatch(groupTag);
+        final clientName = invMatch != null ? invMatch.group(1)!.trim() : groupTag;
+        final invoiceNo = invMatch != null ? invMatch.group(2)!.trim() : '';
+
+        list.add(
+          ClientOrderGroup(
+            clientId: 'group-${groupTag.hashCode}',
+            clientName: clientName,
+            invoiceNumber: invoiceNo,
+            items: groupItems,
+            jerseyPrice: price,
+            paidAmount: clientPaid,
+          ),
+        );
+      });
+      return list;
+    }
+    return [];
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -120,6 +227,7 @@ class Bill {
       'paidAmount': paidAmount,
       'paymentMethod': paymentMethod,
       'notes': notes,
+      'clientGroups': clientGroups.map((e) => e.toMap()).toList(),
       'companyName': companyName,
       'companyTagline': companyTagline,
       'companyEmail': companyEmail,
@@ -180,6 +288,10 @@ class Bill {
       routingNumber: map['routingNumber'] as String? ?? '060914152',
       swiftCode: map['swiftCode'] as String? ?? 'BRAKBDDH',
       terms: (map['terms'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
+      clientGroups: (map['clientGroups'] as List<dynamic>?)
+              ?.map((e) => ClientOrderGroup.fromMap(Map<String, dynamic>.from(e as Map), itemsList))
+              .toList() ??
+          [],
     );
   }
 }
