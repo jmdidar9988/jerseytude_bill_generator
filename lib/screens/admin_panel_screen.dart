@@ -55,7 +55,7 @@ class AdminPanelScreen extends StatefulWidget {
                 keyboardType: TextInputType.visiblePassword,
                 decoration: InputDecoration(
                   labelText: 'Admin Password / PIN',
-                  hintText: 'Default PIN is 1234',
+                  hintText: 'Enter Admin Password',
                   prefixIcon: const Icon(Icons.lock_outline),
                   errorText: errorText,
                   suffixIcon: IconButton(
@@ -69,7 +69,7 @@ class AdminPanelScreen extends StatefulWidget {
                   if (valid) {
                     Navigator.of(ctx).pop(true);
                   } else {
-                    setState(() => errorText = 'Incorrect Password. Try default: 1234');
+                    setState(() => errorText = 'Incorrect Password.');
                   }
                 },
               ),
@@ -87,7 +87,7 @@ class AdminPanelScreen extends StatefulWidget {
                 if (valid) {
                   Navigator.of(ctx).pop(true);
                 } else {
-                  setState(() => errorText = 'Incorrect Password. Try default: 1234');
+                  setState(() => errorText = 'Incorrect Password.');
                 }
               },
               child: const Text('Unlock Panel'),
@@ -160,7 +160,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       await _loadFabrics();
     } else {
       setState(() {
-        _lockErrorText = 'Incorrect Password. Try default: 1234';
+        _lockErrorText = 'Incorrect Password.';
       });
     }
   }
@@ -555,7 +555,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                             keyboardType: TextInputType.visiblePassword,
                             decoration: InputDecoration(
                               labelText: 'Admin Password / PIN',
-                              hintText: 'Default PIN is 1234',
+                              hintText: 'Enter Admin Password',
                               prefixIcon: const Icon(Icons.lock_outline),
                               errorText: _lockErrorText,
                               suffixIcon: IconButton(

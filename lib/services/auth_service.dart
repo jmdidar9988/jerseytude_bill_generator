@@ -82,7 +82,7 @@ class AuthService {
           }
           return AuthResult(
             success: false,
-            message: 'Invalid email or password. Use default: $defaultEmail / $defaultPassword or reset password.',
+            message: 'Invalid email or password. Please check your credentials or reset your password.',
           );
         } else if (e.code == 'network-request-failed' || e.code == 'configuration-not-found') {
           // Offline or Firebase Auth not yet enabled in Console - check local
@@ -104,7 +104,7 @@ class AuthService {
 
     return AuthResult(
       success: false,
-      message: 'Invalid email or password. Try default: $defaultEmail / $defaultPassword',
+      message: 'Invalid email or password. Please check your credentials.',
     );
   }
 
@@ -147,7 +147,7 @@ class AuthService {
       final currentPin = prefs.getString(_adminPinKey) ?? '1234';
 
       if (adminPin.trim() != currentPin.trim()) {
-        return AuthResult(success: false, message: 'Incorrect Admin PIN. Default PIN is 1234.');
+        return AuthResult(success: false, message: 'Incorrect Admin PIN. Please enter the correct PIN.');
       }
 
       final cleanEmail = email.trim().toLowerCase().isEmpty ? defaultEmail : email.trim().toLowerCase();
@@ -219,3 +219,4 @@ class AuthResult {
 
   AuthResult({required this.success, required this.message});
 }
+

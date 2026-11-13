@@ -11,8 +11,8 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController(text: 'jerseytude.official@gmail.com');
-  final _passwordController = TextEditingController(text: 'password123');
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
 
   bool _isObscured = true;
   bool _isLoading = false;
@@ -187,7 +187,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ] else ...[
                     const Text(
-                      'Enter your Admin PIN (Default: 1234) and set a new password directly.',
+                      'Enter your Admin PIN and set a new password directly.',
                       style: TextStyle(fontSize: 12.5, color: AppTheme.textSecondary),
                     ),
                     const SizedBox(height: 12),
@@ -196,7 +196,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       obscureText: isPinObscured,
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(
-                        labelText: 'Admin PIN (Default: 1234)',
+                        labelText: 'Admin PIN',
                         prefixIcon: const Icon(Icons.pin_outlined),
                         suffixIcon: IconButton(
                           icon: Icon(isPinObscured ? Icons.visibility : Icons.visibility_off, size: 20),
@@ -365,10 +365,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       TextFormField(
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
+                        enableSuggestions: false,
+                        autocorrect: false,
                         textInputAction: TextInputAction.next,
                         decoration: const InputDecoration(
                           labelText: 'Email Address',
-                          hintText: 'e.g. jerseytude.official@gmail.com',
+                          hintText: 'Enter your email',
                           prefixIcon: Icon(Icons.email_outlined),
                         ),
                         validator: (value) {
@@ -387,10 +389,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       TextFormField(
                         controller: _passwordController,
                         obscureText: _isObscured,
+                        enableSuggestions: false,
+                        autocorrect: false,
                         textInputAction: TextInputAction.done,
                         onFieldSubmitted: (_) => _handleLogin(),
                         decoration: InputDecoration(
                           labelText: 'Password',
+                          hintText: 'Enter your password',
                           prefixIcon: const Icon(Icons.lock_outline),
                           suffixIcon: IconButton(
                             icon: Icon(_isObscured ? Icons.visibility : Icons.visibility_off),
@@ -449,41 +454,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                   'Sign In',
                                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
                                 ),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Quick Autofill Demo Credentials Pill
-                      InkWell(
-                        borderRadius: BorderRadius.circular(8),
-                        onTap: () {
-                          setState(() {
-                            _emailController.text = 'jerseytude.official@gmail.com';
-                            _passwordController.text = 'password123';
-                            _errorMessage = null;
-                          });
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade50.withValues(alpha: 0.6),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.blue.shade200),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.info_outline, size: 14, color: AppTheme.accent),
-                              SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  'Default: jerseytude.official@gmail.com / password123',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(fontSize: 11, color: AppTheme.accent, fontWeight: FontWeight.w600),
-                                ),
-                              ),
-                            ],
-                          ),
                         ),
                       ),
                     ],
