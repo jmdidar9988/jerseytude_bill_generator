@@ -2,6 +2,8 @@ name: Release & Deployment
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
@@ -57,18 +59,24 @@ jobs:
       - name: Build Android Release APK
         run: flutter build apk --release
 
-      - name: Rename APK Artifact
+      - name: Copy & Prepare APK
         run: |
           cp build/app/outputs/flutter-apk/app-release.apk jerseytude-bill-generator.apk
 
-      - name: Deploy to GitHub Pages
-        uses: actions/upload-pages-artifact@v3
+      - name: Upload APK as GitHub Actions Artifact (Always Downloadable)
+        uses: actions/upload-artifact@v4
         with:
-          path: build/web
+          name: Jerseytude-Android-APK
+          path: jerseytude-bill-generator.apk
+          if-no-files-found: error
+          retention-days: 90
 
-      - name: Publish to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Upload Web Bundle as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Jerseytude-Web-Bundle
+          path: jerseytude-web.zip
+          retention-days: 30
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -81,3 +89,14 @@ jobs:
           files: |
             jerseytude-bill-generator.apk
             jerseytude-web.zip
+
+      - name: Deploy to GitHub Pages
+        continue-on-error: true
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+      - name: Publish to GitHub Pages
+        continue-on-error: true
+        id: deployment
+        uses: actions/deploy-pages@v4
