@@ -156,6 +156,29 @@ flutter analyze
 
 ---
 
+## 🚀 Building for Production & Releases
+
+### 1. Web Release Build (Static Hosting)
+Generate the optimized web production bundle:
+```bash
+flutter build web --release
+```
+The compiled static assets will be located in `build/web/`. You can deploy this folder directly to **Firebase Hosting**, **GitHub Pages**, **Vercel**, or **Netlify**.
+
+### 2. Automated Cloud Release (GitHub Actions)
+A CI/CD workflow is included at `.github/workflows/release.yml`. When you push a version tag:
+```bash
+git tag -a v1.0.0 -m "Release v1.0.0"
+git push origin v1.0.0
+```
+GitHub Actions will automatically:
+- Run tests and static analysis.
+- Build the production Web app and deploy to **GitHub Pages**.
+- Build the **Android Release APK** (`jerseytude-bill-generator.apk`).
+- Create an official **GitHub Release** with downloadable APK and Web ZIP bundles attached.
+
+---
+
 ## 📄 License
 
 This project is proprietary software created for **Jerseytude**. All rights reserved.

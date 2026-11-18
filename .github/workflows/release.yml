@@ -1,0 +1,83 @@
+name: Release & Deployment
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "release"
+  cancel-in-progress: false
+
+jobs:
+  build-and-release:
+    name: Build & Publish Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Verify Code Quality & Tests
+        run: |
+          flutter analyze
+          flutter test
+
+      - name: Build Web Application
+        run: flutter build web --release --base-href "/${{ github.event.repository.name }}/"
+
+      - name: Archive Web Output
+        run: |
+          cd build/web
+          zip -r ../../jerseytude-web.zip .
+          cd ../..
+
+      - name: Build Android Release APK
+        run: flutter build apk --release
+
+      - name: Rename APK Artifact
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk jerseytude-bill-generator.apk
+
+      - name: Deploy to GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+      - name: Publish to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          name: Jerseytude Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            jerseytude-bill-generator.apk
+            jerseytude-web.zip

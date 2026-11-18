@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.jerseytude" "\0"
-            VALUE "FileDescription", "jerseytude_bill_generator" "\0"
+            VALUE "CompanyName", "Jerseytude" "\0"
+            VALUE "FileDescription", "Jerseytude Bill Generator & Invoicing" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "jerseytude_bill_generator" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.jerseytude. All rights reserved." "\0"
-            VALUE "OriginalFilename", "jerseytude_bill_generator.exe" "\0"
-            VALUE "ProductName", "jerseytude_bill_generator" "\0"
+            VALUE "InternalName", "Jerseytude" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Jerseytude. All rights reserved." "\0"
+            VALUE "OriginalFilename", "Jerseytude.exe" "\0"
+            VALUE "ProductName", "Jerseytude Bill Generator" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
