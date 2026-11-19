@@ -22,6 +22,7 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
   List<Bill> _allBills = [];
   final Set<String> _selectedBillIds = {};
   final Map<String, TextEditingController> _supplierPaidControllers = {};
+  final Map<String, TextEditingController> _supplierDeliveryControllers = {};
   List<FabricItem> _fabrics = [];
   Map<String, double> _billOrderCosts = {};
   bool _isLoading = true;
@@ -38,6 +39,9 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
     for (final controller in _supplierPaidControllers.values) {
       controller.dispose();
     }
+    for (final controller in _supplierDeliveryControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -50,6 +54,19 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
       _supplierPaidControllers[billId] = ctrl;
     }
     return _supplierPaidControllers[billId]!;
+  }
+
+  TextEditingController _getOrCreateDeliveryController(Bill bill) {
+    if (!_supplierDeliveryControllers.containsKey(bill.id)) {
+      final ctrl = TextEditingController(
+        text: bill.deliveryFee > 0 ? bill.deliveryFee.toStringAsFixed(0) : '0',
+      );
+      ctrl.addListener(() {
+        if (mounted) setState(() {});
+      });
+      _supplierDeliveryControllers[bill.id] = ctrl;
+    }
+    return _supplierDeliveryControllers[bill.id]!;
   }
 
   double _computeOrderCost(Bill bill, List<FabricItem> fabrics) {
@@ -111,8 +128,16 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
   int get _totalSelectedPieces =>
       _selectedBills.fold(0, (sum, b) => sum + b.totalQuantity);
 
-  double get _totalFactoryCost =>
+  double get _totalJerseyCost =>
       _selectedBills.fold(0.0, (sum, b) => sum + (_billOrderCosts[b.id] ?? 0.0));
+
+  double get _totalSupplierDelivery =>
+      _selectedBills.fold(0.0, (sum, b) {
+        final ctrl = _supplierDeliveryControllers[b.id];
+        return sum + (ctrl != null ? (double.tryParse(ctrl.text.trim()) ?? 0.0) : b.deliveryFee);
+      });
+
+  double get _totalFactoryCost => _totalJerseyCost + _totalSupplierDelivery;
 
   double get _totalSupplierPaid {
     double sum = 0.0;
@@ -133,6 +158,7 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
       for (final b in _filteredBills) {
         _selectedBillIds.add(b.id);
         _getOrCreateController(b.id);
+        _getOrCreateDeliveryController(b);
       }
     });
   }
@@ -197,8 +223,10 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
 
       totalCombinedCost += singleBillFactoryCost;
       final paidForBill = double.tryParse(_supplierPaidControllers[b.id]?.text.trim() ?? '') ?? 0.0;
+      final deliveryForBill = double.tryParse(_supplierDeliveryControllers[b.id]?.text.trim() ?? '') ?? 0.0;
       totalCombinedPaid += paidForBill;
-      final dueForBill = (singleBillFactoryCost - paidForBill).clamp(0.0, double.infinity);
+      final totalForBill = singleBillFactoryCost + deliveryForBill;
+      final dueForBill = (totalForBill - paidForBill).clamp(0.0, double.infinity);
 
       clientGroups.add(
         ClientOrderGroup(
@@ -208,26 +236,36 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
           project: b.project,
           items: billOrderItems,
           jerseyPrice: singleBillFactoryCost,
+          deliveryFee: deliveryForBill,
           paidAmount: paidForBill,
         ),
       );
 
       final projectText = b.project.trim().isNotEmpty ? ' • ${b.project.trim()}' : '';
+      final deliveryText = deliveryForBill > 0 ? ' | Delivery BDT ${deliveryForBill.toStringAsFixed(0)}' : '';
       paymentBreakdownNotes.add(
-        '• ${b.customerName} (${b.invoiceNumber}$projectText): Cost BDT ${singleBillFactoryCost.toStringAsFixed(0)} | Factory Paid BDT ${paidForBill.toStringAsFixed(0)} | Due BDT ${dueForBill.toStringAsFixed(0)}',
+        '• ${b.customerName} (${b.invoiceNumber}$projectText): Jersey BDT ${singleBillFactoryCost.toStringAsFixed(0)}$deliveryText | Factory Paid BDT ${paidForBill.toStringAsFixed(0)} | Due BDT ${dueForBill.toStringAsFixed(0)}',
       );
     }
 
     final nextNo = await FirestoreService.getNextInvoiceNumber();
     final orderInvoiceNo = nextNo.replaceFirst('JT-', 'JT-ORD-');
 
-    final String finalPaymentStatus = (totalCombinedPaid >= totalCombinedCost && totalCombinedCost > 0)
+    final totalCombinedDelivery = _selectedBills.fold(0.0, (sum, b) {
+      final ctrl = _supplierDeliveryControllers[b.id];
+      return sum + (ctrl != null ? (double.tryParse(ctrl.text.trim()) ?? 0.0) : b.deliveryFee);
+    });
+    final totalOrderGross = totalCombinedCost + totalCombinedDelivery;
+
+    final String finalPaymentStatus = (totalCombinedPaid >= totalOrderGross && totalOrderGross > 0)
         ? 'Paid'
         : (totalCombinedPaid > 0 ? 'Partial' : 'Pending');
 
     final String notes = 'Combined Factory Order Breakdown (${selected.length} Customer Orders):\n'
         '${paymentBreakdownNotes.join('\n')}\n\n'
-        'Total Factory Cost: BDT ${totalCombinedCost.toStringAsFixed(0)} | Total Paid: BDT ${totalCombinedPaid.toStringAsFixed(0)} | Balance Due: BDT ${(_totalSupplierDue).toStringAsFixed(0)}';
+        'Total Factory Cost: BDT ${totalCombinedCost.toStringAsFixed(0)}'
+        '${totalCombinedDelivery > 0 ? " | Total Delivery: BDT ${totalCombinedDelivery.toStringAsFixed(0)}" : ""}'
+        ' | Total Paid: BDT ${totalCombinedPaid.toStringAsFixed(0)} | Balance Due: BDT ${(_totalSupplierDue).toStringAsFixed(0)}';
 
     final combinedOrderBill = Bill(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -240,6 +278,7 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
       customerPhone: '+880 1319-923519',
       project: 'Combined Order: ${clientNames.join(", ")}',
       items: combinedItems,
+      deliveryFee: totalCombinedDelivery,
       paidAmount: totalCombinedPaid,
       notes: notes,
       clientGroups: clientGroups,
@@ -432,9 +471,12 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
                             final bill = _filteredBills[index];
                             final isSelected = _selectedBillIds.contains(bill.id);
                             final factoryCost = _billOrderCosts[bill.id] ?? 0.0;
-                            final controller = _getOrCreateController(bill.id);
-                            final currentPaid = double.tryParse(controller.text.trim()) ?? 0.0;
-                            final currentDue = (factoryCost - currentPaid).clamp(0.0, double.infinity);
+                            final paidController = _getOrCreateController(bill.id);
+                            final deliveryController = _getOrCreateDeliveryController(bill);
+                            final currentPaid = double.tryParse(paidController.text.trim()) ?? 0.0;
+                            final currentDelivery = double.tryParse(deliveryController.text.trim()) ?? 0.0;
+                            final totalCostForBill = factoryCost + currentDelivery;
+                            final currentDue = (totalCostForBill - currentPaid).clamp(0.0, double.infinity);
 
                             return Card(
                               elevation: isSelected ? 2 : 0,
@@ -461,6 +503,7 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
                                               if (val == true) {
                                                 _selectedBillIds.add(bill.id);
                                                 _getOrCreateController(bill.id);
+                                                _getOrCreateDeliveryController(bill);
                                               } else {
                                                 _selectedBillIds.remove(bill.id);
                                               }
@@ -534,7 +577,7 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
                                       ),
                                     ),
 
-                                    // Per-Invoice Paid Input Section (Visible when selected)
+                                    // Per-Invoice Delivery & Paid Inputs Section (Visible when selected)
                                     if (isSelected) ...[
                                       const Divider(height: 16),
                                       Container(
@@ -547,12 +590,13 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
+                                            // 1. Delivery Charge for this Invoice
                                             const Row(
                                               children: [
-                                                Icon(Icons.payment, size: 16, color: Colors.purple),
+                                                Icon(Icons.local_shipping_outlined, size: 16, color: Colors.purple),
                                                 SizedBox(width: 6),
                                                 Text(
-                                                  'Paid to Factory for this Order:',
+                                                  'Delivery Charge for this Order (BDT):',
                                                   style: TextStyle(
                                                     fontWeight: FontWeight.bold,
                                                     fontSize: 12,
@@ -561,14 +605,14 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
                                                 ),
                                               ],
                                             ),
-                                            const SizedBox(height: 8),
+                                            const SizedBox(height: 6),
                                             Row(
                                               children: [
                                                 Expanded(
                                                   child: SizedBox(
                                                     height: 38,
                                                     child: TextField(
-                                                      controller: controller,
+                                                      controller: deliveryController,
                                                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                                       inputFormatters: [
                                                         FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
@@ -589,7 +633,6 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
                                                   ),
                                                 ),
                                                 const SizedBox(width: 8),
-                                                // Quick action: Set 0
                                                 OutlinedButton(
                                                   style: OutlinedButton.styleFrom(
                                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -597,13 +640,71 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
                                                     side: BorderSide(color: Colors.grey.shade400),
                                                   ),
                                                   onPressed: () {
-                                                    controller.text = '0';
+                                                    deliveryController.text = '0';
+                                                    setState(() {});
+                                                  },
+                                                  child: const Text('0', style: TextStyle(fontSize: 12)),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 10),
+
+                                            // 2. Paid to Factory for this Invoice
+                                            const Row(
+                                              children: [
+                                                Icon(Icons.payment, size: 16, color: Colors.purple),
+                                                SizedBox(width: 6),
+                                                Text(
+                                                  'Paid to Factory for this Order (BDT):',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 12,
+                                                    color: Colors.purple,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: SizedBox(
+                                                    height: 38,
+                                                    child: TextField(
+                                                      controller: paidController,
+                                                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                                      inputFormatters: [
+                                                        FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                                                      ],
+                                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                                      decoration: InputDecoration(
+                                                        isDense: true,
+                                                        prefixText: 'BDT ',
+                                                        prefixStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                                        hintText: '0',
+                                                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                                                        fillColor: Colors.white,
+                                                        filled: true,
+                                                      ),
+                                                      onChanged: (_) => setState(() {}),
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                OutlinedButton(
+                                                  style: OutlinedButton.styleFrom(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                                    minimumSize: const Size(40, 38),
+                                                    side: BorderSide(color: Colors.grey.shade400),
+                                                  ),
+                                                  onPressed: () {
+                                                    paidController.text = '0';
                                                     setState(() {});
                                                   },
                                                   child: const Text('0', style: TextStyle(fontSize: 12)),
                                                 ),
                                                 const SizedBox(width: 6),
-                                                // Quick action: Full Payment
                                                 ElevatedButton(
                                                   style: ElevatedButton.styleFrom(
                                                     backgroundColor: Colors.purple,
@@ -612,32 +713,47 @@ class _CombineInvoicesScreenState extends State<CombineInvoicesScreen> {
                                                     minimumSize: const Size(50, 38),
                                                   ),
                                                   onPressed: () {
-                                                    controller.text = factoryCost.toStringAsFixed(0);
+                                                    paidController.text = totalCostForBill.toStringAsFixed(0);
                                                     setState(() {});
                                                   },
                                                   child: const Text('Full', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                                                 ),
                                               ],
                                             ),
-                                            const SizedBox(height: 6),
+                                            const SizedBox(height: 8),
                                             Row(
                                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                               children: [
                                                 Text(
-                                                  'Paid: ${currency.format(currentPaid)}',
+                                                  currentDelivery > 0
+                                                      ? 'Cost: ${currency.format(factoryCost)} + Delivery: ${currency.format(currentDelivery)}'
+                                                      : 'Cost: ${currency.format(factoryCost)}',
                                                   style: const TextStyle(
                                                     fontSize: 11,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: AppTheme.success,
+                                                    fontWeight: FontWeight.w500,
+                                                    color: AppTheme.textSecondary,
                                                   ),
                                                 ),
-                                                Text(
-                                                  'Due: ${currency.format(currentDue)}',
-                                                  style: TextStyle(
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: currentDue > 0 ? AppTheme.warning : AppTheme.success,
-                                                  ),
+                                                Row(
+                                                  children: [
+                                                    Text(
+                                                      'Paid: ${currency.format(currentPaid)}',
+                                                      style: const TextStyle(
+                                                        fontSize: 11,
+                                                        fontWeight: FontWeight.w600,
+                                                        color: AppTheme.success,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 10),
+                                                    Text(
+                                                      'Due: ${currency.format(currentDue)}',
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        fontWeight: FontWeight.w600,
+                                                        color: currentDue > 0 ? AppTheme.warning : AppTheme.success,
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                               ],
                                             ),

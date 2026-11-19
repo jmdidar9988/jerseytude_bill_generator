@@ -8,6 +8,7 @@ class ClientOrderGroup {
   final String project;
   final List<OrderItem> items;
   final double jerseyPrice;
+  double deliveryFee;
   double paidAmount;
 
   ClientOrderGroup({
@@ -17,13 +18,15 @@ class ClientOrderGroup {
     this.project = '',
     this.items = const [],
     required this.jerseyPrice,
+    this.deliveryFee = 0.0,
     this.paidAmount = 0.0,
   });
 
   String get groupKey => invoiceNumber.isNotEmpty ? '$clientName ($invoiceNumber)' : clientName;
   String get displayTitle => invoiceNumber.isNotEmpty ? '$clientName ($invoiceNumber)' : clientName;
 
-  double get dueAmount => (jerseyPrice - paidAmount).clamp(0.0, double.infinity);
+  double get totalAmount => jerseyPrice + deliveryFee;
+  double get dueAmount => (jerseyPrice + deliveryFee - paidAmount).clamp(0.0, double.infinity);
 
   Map<String, dynamic> toMap() => {
     'clientId': clientId,
@@ -31,6 +34,7 @@ class ClientOrderGroup {
     'invoiceNumber': invoiceNumber,
     'project': project,
     'jerseyPrice': jerseyPrice,
+    'deliveryFee': deliveryFee,
     'paidAmount': paidAmount,
   };
 
@@ -54,6 +58,7 @@ class ClientOrderGroup {
       project: project,
       items: matchingItems.isNotEmpty ? matchingItems : allItems,
       jerseyPrice: (map['jerseyPrice'] as num?)?.toDouble() ?? 0.0,
+      deliveryFee: (map['deliveryFee'] as num?)?.toDouble() ?? 0.0,
       paidAmount: (map['paidAmount'] as num?)?.toDouble() ?? 0.0,
     );
   }

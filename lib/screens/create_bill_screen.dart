@@ -140,6 +140,7 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
       final invoiceNo = invMatch != null ? invMatch.group(2)!.trim() : '';
 
       String project = '';
+      double existingDelivery = 0.0;
       if (!_clientPaidControllers.containsKey(key)) {
         double initialPaid = 0.0;
         final existing = widget.existingBill?.clientGroups.firstWhere(
@@ -149,6 +150,7 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
         );
         if (existing != null) {
           project = existing.project;
+          existingDelivery = existing.deliveryFee;
           if (existing.paidAmount > 0) {
             initialPaid = existing.paidAmount;
           }
@@ -164,6 +166,7 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
         );
         if (existing != null) {
           project = existing.project;
+          existingDelivery = existing.deliveryFee;
         }
       }
 
@@ -177,6 +180,7 @@ class _CreateBillScreenState extends State<CreateBillScreen> {
         project: project,
         items: clientItems,
         jerseyPrice: price,
+        deliveryFee: existingDelivery,
         paidAmount: currentPaid,
       ));
     });

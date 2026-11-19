@@ -440,7 +440,7 @@ class PdfInvoiceService {
                         }),
                       ],
                     ),
-                    // Client Jersey Price, Paid, Due Sub-summary
+                    // Client Jersey Price, Delivery (if > 0), Paid, Due Sub-summary
                     pw.Container(
                       padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       color: cardBg,
@@ -451,6 +451,11 @@ class PdfInvoiceService {
                             children: [
                               pw.Text('${group.displayTitle} Jersey Price: ', style: pw.TextStyle(fontSize: 8.5, font: fontBold, color: primaryDark)),
                               pw.Text(currencyFormat.format(group.jerseyPrice), style: pw.TextStyle(fontSize: 8.5, font: fontBold, color: primaryDark)),
+                              if (group.deliveryFee > 0) ...[
+                                pw.SizedBox(width: 10),
+                                pw.Text('Delivery: ', style: pw.TextStyle(fontSize: 8.5, font: fontBold, color: accentBlue)),
+                                pw.Text(currencyFormat.format(group.deliveryFee), style: pw.TextStyle(fontSize: 8.5, font: fontBold, color: accentBlue)),
+                              ],
                             ],
                           ),
                           pw.Row(
@@ -509,12 +514,25 @@ class PdfInvoiceService {
                         children: [
                           pw.Text('Total Jersey Price', style: const pw.TextStyle(fontSize: 7.5, color: textMuted)),
                           pw.Text(
-                            currencyFormat.format(bill.grandTotal),
+                            currencyFormat.format(bill.subtotal > 0 ? bill.subtotal : bill.grandTotal),
                             style: pw.TextStyle(fontSize: 10, font: fontBold, color: primaryDark),
                           ),
                         ],
                       ),
-                      pw.SizedBox(width: 16),
+                      if (bill.deliveryFee > 0) ...[
+                        pw.SizedBox(width: 14),
+                        pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.end,
+                          children: [
+                            pw.Text('Total Delivery', style: const pw.TextStyle(fontSize: 7.5, color: textMuted)),
+                            pw.Text(
+                              currencyFormat.format(bill.deliveryFee),
+                              style: pw.TextStyle(fontSize: 10, font: fontBold, color: accentBlue),
+                            ),
+                          ],
+                        ),
+                      ],
+                      pw.SizedBox(width: 14),
                       pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.end,
                         children: [
@@ -525,7 +543,7 @@ class PdfInvoiceService {
                           ),
                         ],
                       ),
-                      pw.SizedBox(width: 16),
+                      pw.SizedBox(width: 14),
                       pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.end,
                         children: [
@@ -616,6 +634,110 @@ class PdfInvoiceService {
                     ],
                   );
                 }),
+                // Subtotal Row (Visible when Delivery Charge or Discount is present)
+                if (bill.deliveryFee > 0 || bill.discount > 0) ...[
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(
+                      color: cardBg,
+                      border: pw.Border(
+                        top: pw.BorderSide(color: primaryDark, width: 1.0),
+                        bottom: pw.BorderSide(color: borderColor, width: 0.5),
+                      ),
+                    ),
+                    children: [
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+                        child: pw.Text(
+                          'Total Quantity',
+                          style: pw.TextStyle(font: fontBold, fontSize: 8.5, color: primaryDark),
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+                        child: pw.Text(
+                          '${bill.totalQuantity} pcs',
+                          textAlign: pw.TextAlign.center,
+                          style: pw.TextStyle(font: fontBold, fontSize: 8.5, color: primaryDark),
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+                        child: pw.Text(
+                          'Subtotal:',
+                          textAlign: pw.TextAlign.right,
+                          style: pw.TextStyle(font: fontBold, fontSize: 8.5, color: primaryDark),
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+                        child: pw.Text(
+                          currencyFormat.format(bill.subtotal),
+                          textAlign: pw.TextAlign.right,
+                          style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: primaryDark),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (bill.deliveryFee > 0)
+                    pw.TableRow(
+                      decoration: const pw.BoxDecoration(
+                        color: PdfColors.white,
+                        border: pw.Border(
+                          bottom: pw.BorderSide(color: borderColor, width: 0.5),
+                        ),
+                      ),
+                      children: [
+                        pw.Container(),
+                        pw.Container(),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+                          child: pw.Text(
+                            'Delivery Charge:',
+                            textAlign: pw.TextAlign.right,
+                            style: pw.TextStyle(font: fontBold, fontSize: 8.5, color: accentBlue),
+                          ),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+                          child: pw.Text(
+                            currencyFormat.format(bill.deliveryFee),
+                            textAlign: pw.TextAlign.right,
+                            style: pw.TextStyle(font: fontBold, fontSize: 9, color: accentBlue),
+                          ),
+                        ),
+                      ],
+                    ),
+                  if (bill.discount > 0)
+                    pw.TableRow(
+                      decoration: const pw.BoxDecoration(
+                        color: PdfColors.white,
+                        border: pw.Border(
+                          bottom: pw.BorderSide(color: borderColor, width: 0.5),
+                        ),
+                      ),
+                      children: [
+                        pw.Container(),
+                        pw.Container(),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+                          child: pw.Text(
+                            'Special Discount:',
+                            textAlign: pw.TextAlign.right,
+                            style: pw.TextStyle(font: fontBold, fontSize: 8.5, color: const PdfColor.fromInt(0xFFDC2626)),
+                          ),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+                          child: pw.Text(
+                            '- ${currencyFormat.format(bill.discount)}',
+                            textAlign: pw.TextAlign.right,
+                            style: pw.TextStyle(font: fontBold, fontSize: 9, color: const PdfColor.fromInt(0xFFDC2626)),
+                          ),
+                        ),
+                      ],
+                    ),
+                ],
+
                 // Grand Total Summary Row
                 pw.TableRow(
                   decoration: const pw.BoxDecoration(
@@ -629,14 +751,14 @@ class PdfInvoiceService {
                     pw.Padding(
                       padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                       child: pw.Text(
-                        'Total Quantity',
+                        (bill.deliveryFee > 0 || bill.discount > 0) ? '' : 'Total Quantity',
                         style: pw.TextStyle(font: fontBold, fontSize: 9, color: primaryDark),
                       ),
                     ),
                     pw.Padding(
                       padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                       child: pw.Text(
-                        '${bill.totalQuantity} pcs',
+                        (bill.deliveryFee > 0 || bill.discount > 0) ? '' : '${bill.totalQuantity} pcs',
                         textAlign: pw.TextAlign.center,
                         style: pw.TextStyle(font: fontBold, fontSize: 9, color: primaryDark),
                       ),
