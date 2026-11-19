@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   build-and-release:
-    name: Build & Publish Release
+    name: Build Web & Android Release
     runs-on: ubuntu-latest
 
     steps:
@@ -100,3 +100,44 @@ jobs:
         continue-on-error: true
         id: deployment
         uses: actions/deploy-pages@v4
+
+  build-windows:
+    name: Build Windows Desktop App
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Enable Windows Desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build Windows Desktop Release
+        run: flutter build windows --release
+
+      - name: Compress Windows Output
+        run: |
+          Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath "Jerseytude-Windows-Desktop.zip"
+
+      - name: Upload Windows Desktop Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Jerseytude-Windows-Desktop
+          path: Jerseytude-Windows-Desktop.zip
+          retention-days: 90
+
+      - name: Attach Windows App to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: Jerseytude-Windows-Desktop.zip
